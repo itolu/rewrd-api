@@ -1,0 +1,511 @@
+// Enums
+Enum AutomationTrigger {
+  earning
+  birthday
+  anniversary
+  redemption
+  sign_up
+  point_activation
+  point_reactivation
+  points_expiration
+}
+
+Enum BusinessInformationStatus {
+  pending
+  under_review
+  approved
+  rejected
+}
+
+Enum CustomerStatus {
+  active
+  inactive
+  restricted
+}
+
+Enum EmailAction {
+  opened
+  clicked
+  bounced
+  sent
+  delivered
+}
+
+Enum EmailStatus {
+  sent
+  scheduled
+  cancelled
+}
+
+Enum EmailType {
+  instant
+  scheduled
+}
+
+Enum IdentityType {
+  bvn
+  nin
+  passport
+  voters_card
+}
+
+Enum LedgerTransactionType {
+  debit
+  credit
+}
+
+Enum OrdersEarningsType {
+  fixed
+  percentage_off
+}
+
+Enum PointChannel {
+  online
+  offline
+}
+
+Enum PointsFromTo {
+  system
+  merchant
+  member
+}
+
+Enum PointsLedgerType {
+  credit
+  debit
+}
+
+Enum PointsTransactionStatus {
+  successful
+  pending
+  failed
+}
+
+Enum PointsTransactionType {
+  merchant_points_bonus
+  merchant_points_purchase
+  merchant_signup_bonus
+  member_purchase_order_earned_fixed
+  member_purchase_order_earned_percentage
+  member_purchase_order_redeemed
+  member_signup
+  member_birthday
+  member_anniversary
+  member_points_expired
+  merchant_points_order_debit
+  member_points_adjustment_credit
+  member_points_adjustment_debit
+  merchant_points_signup_debit
+  merchant_points_anniversary_debit
+  merchant_points_birthday_debit
+  merchant_to_member_points_adjustment
+}
+
+Enum SourceEnum {
+  online
+  offline
+}
+
+Enum WaysStatus {
+  active
+  inactive
+}
+
+Enum WaysSubtype {
+  signup
+  order
+  birthday
+  anniversary
+}
+
+Enum WaysType {
+  task
+  social
+}
+
+Enum OverallCustomerStatus {
+  active
+  inactive
+  restricted
+}
+
+Enum UserEnum {
+  merchant
+  member
+}
+
+Enum CustomerAuditType {
+  admin_details_edit
+  admin_account_restriction
+  account_restriction_by_merchant
+  member_self_edit
+}
+
+Enum MerchantAuditType {
+  admin_details_edit
+  admin_account_restriction
+  admin_kyb_approval
+  admin_kyb_rejection
+}
+
+Enum ActorTypeEnum {
+  admin
+  merchant
+  member
+}
+
+// Tables
+Table Automation {
+  id int [pk, increment]
+  title varchar
+  description varchar
+  created_at datetime [default: `now()`]
+  updated_at datetime [default: `now()`]
+  email_body varchar [note: 'nullable']
+  email_subject varchar [note: 'nullable']
+  trigger_when varchar [note: 'nullable']
+  trigger AutomationTrigger [note: 'nullable']
+  point_expire_when varchar [note: 'nullable']
+}
+
+Table AutomationsLog {
+  id int [pk, increment]
+  merchant_id varchar
+  customer_id varchar
+  points int [note: 'nullable']
+  title varchar
+  activity varchar
+  transaction_type LedgerTransactionType [note: 'nullable']
+  created_at datetime [default: `now()`]
+  updated_at datetime [default: `now()`]
+  expiration_date datetime [default: `now()`]
+  automation_id int [note: 'nullable']
+  trigger AutomationTrigger [note: 'nullable']
+}
+
+Ref: AutomationsLog.customer_id > UniqueCustomers.uid
+
+Table Customers {
+  id int [pk, increment]
+  merchant_id varchar
+  name varchar [note: 'nullable']
+  phone_number varchar
+  hash varchar [note: 'nullable']
+  created_at datetime [default: `now()`]
+  updated_at datetime [default: `now()`]
+  customer_email varchar [note: 'nullable']
+  points_balance decimal(10, 2) [default: 0]
+  avatar varchar [note: 'nullable']
+  date_of_birth datetime [note: 'nullable']
+  purchase_count int [default: 0]
+  amount_spent int [default: 0]
+  uid varchar
+  points_spent int [default: 0, note: 'nullable']
+  source SourceEnum [default: 'offline', note: 'nullable']
+  spend_threshold_amt int [default: 0]
+  total_amt_spent int [default: 0, note: 'nullable']
+  points_earned int [default: 0, note: 'nullable']
+  points_expired int [default: 0, note: 'nullable']
+  signed_up_at datetime [note: 'nullable']
+  status CustomerStatus [default: 'inactive', note: 'nullable']
+  number_of_transactions int [default: 0, note: 'nullable']
+  threshold_reached boolean [default: false, note: 'nullable']
+  point_expiration_date datetime [note: 'nullable']
+  first_name varchar [note: 'nullable']
+  last_name varchar [note: 'nullable']
+
+  Indexes {
+    (merchant_id, created_at)
+    (merchant_id, customer_email)
+    (merchant_id, phone_number)
+    (uid)
+    (merchant_id, uid)
+  }
+}
+
+Table EmailDeliveryLog {
+  id int [pk, increment]
+  merchant_id varchar
+  customer_id varchar
+  title varchar
+  recipient varchar
+  action EmailAction [default: 'opened']
+  action_time datetime [note: 'nullable']
+  created_at datetime [default: `now()`]
+  updated_at datetime [default: `now()`]
+  date_sent datetime [default: `now()`]
+  delivered_at datetime [default: `now()`, note: 'nullable']
+  email_id int
+  opened_at datetime [default: `now()`, note: 'nullable']
+  sent_at datetime [default: `now()`]
+  bounced_at datetime [default: `now()`, note: 'nullable']
+  clicked_at datetime [default: `now()`, note: 'nullable']
+}
+
+Ref: EmailDeliveryLog.customer_id > UniqueCustomers.uid
+
+Table Emails {
+  id int [pk, increment]
+  merchant_id varchar
+  title varchar
+  email_subject varchar
+  email_body varchar
+  email_type EmailType [default: 'instant']
+  status EmailStatus [default: 'sent']
+  scheduled_time datetime [default: `now()`, note: 'nullable']
+  sent_time datetime [default: `now()`, note: 'nullable']
+  cancelled_time datetime [default: `now()`, note: 'nullable']
+  created_at datetime [default: `now()`]
+  updated_at datetime [default: `now()`]
+  segment_id int
+}
+
+Ref: Emails.segment_id > Segments.id
+
+Table KYB {
+  id int [pk, increment]
+  merchant_id varchar [unique]
+  job_title varchar [note: 'nullable']
+  dob datetime [note: 'nullable']
+  identity_type IdentityType [note: 'nullable']
+  identity_number varchar [note: 'nullable']
+  identity_document varchar [note: 'nullable']
+  business_name varchar [note: 'nullable']
+  business_industry varchar [note: 'nullable']
+  country varchar [note: 'nullable']
+  state varchar [note: 'nullable']
+  address varchar [note: 'nullable']
+  website varchar [note: 'nullable']
+  description varchar [note: 'nullable']
+  business_information_submitted boolean [default: false]
+  business_document_submitted boolean [default: false]
+  created_at datetime [default: `now()`]
+  updated_at datetime [default: `now()`]
+  comment varchar [note: 'nullable']
+  registered_business_document varchar [note: 'nullable']
+  registered_business_name varchar [note: 'nullable']
+  registered_business_number varchar [note: 'nullable']
+  utility_bill varchar [note: 'nullable']
+  business_document_status BusinessInformationStatus [default: 'pending']
+  business_information_status BusinessInformationStatus [default: 'pending']
+  business_logo varchar [note: 'nullable']
+
+  Indexes {
+    (merchant_id)
+  }
+}
+
+Table Merchants {
+  merchant_id varchar [unique]
+  email varchar [unique]
+  full_name varchar [note: 'nullable']
+  phone_number varchar
+  created_at datetime [default: `now()`]
+  updated_at datetime [default: `now()`]
+  password varchar
+  phone_number_verified boolean [default: false]
+  id int [pk, increment]
+  billing_email varchar [note: 'nullable']
+  currency_code varchar [note: 'nullable']
+  reply_to_email varchar [note: 'nullable']
+  sender_name varchar [note: 'nullable']
+  pin_hash varchar [note: 'nullable']
+  facebook varchar [default: '', note: 'nullable']
+  ig_handle varchar [default: '', note: 'nullable']
+  linked_in varchar [default: '', note: 'nullable']
+  telegram varchar [default: '', note: 'nullable']
+  tiktok varchar [default: '', note: 'nullable']
+  whatsapp varchar [default: '', note: 'nullable']
+  x_handle varchar [default: '', note: 'nullable']
+  youtube varchar [default: '', note: 'nullable']
+  snapchat varchar [default: '', note: 'nullable']
+  point_balance int [default: 0]
+  last_chance_email_countdown int [default: 5]
+  minimum_threshold_amount int [default: 0]
+  point_should_expire boolean [default: true]
+  reactivation_email_countdown int [default: 15]
+  point_expiration_date int [default: 180, note: 'nullable']
+  minimum_threshold_updated_at datetime [note: 'nullable']
+  first_name varchar [note: 'nullable']
+  last_name varchar [note: 'nullable']
+
+  Indexes {
+    (merchant_id)
+  }
+}
+
+Table Notifications {
+  id int [pk, increment]
+  merchant_id varchar [note: 'nullable']
+  title varchar
+  content varchar
+  read boolean [default: false]
+  created_at datetime [default: `now()`]
+  updated_at datetime [default: `now()`]
+}
+
+Table Onboard {
+  id varchar [pk]
+  email varchar [unique]
+  full_name varchar [note: 'nullable']
+  phone_number varchar
+  onboarded boolean [default: false]
+  created_at datetime [default: `now()`]
+  updated_at datetime [default: `now()`]
+  first_name varchar [note: 'nullable']
+  last_name varchar [note: 'nullable']
+}
+
+Table Pointsledger {
+  id int [pk, increment]
+  merchant_id varchar
+  member_uid varchar [note: 'nullable']
+  title varchar
+  narration varchar [note: 'nullable']
+  activity varchar [note: 'nullable']
+  ledger_type PointsLedgerType
+  transaction_type PointsTransactionType
+  from PointsFromTo [note: 'nullable']
+  to PointsFromTo [note: 'nullable']
+  status PointsTransactionStatus [default: 'pending']
+  reference_id varchar [unique]
+  created_at datetime [default: `now()`]
+  updated_at datetime [default: `now()`]
+  channel PointChannel [default: 'offline']
+  order_id varchar [note: 'nullable']
+  percent_value decimal(5, 2) [note: 'nullable']
+  points decimal(10, 2) [default: 0]
+  order_value_ngn decimal(10, 2) [default: 0]
+  points_balance_after decimal(10, 2) [default: 0]
+  points_balance_before decimal(10, 2) [default: 0]
+  processed boolean [default: true]
+  initiated_by varchar [note: 'nullable']
+  payable_value_ngn decimal(10, 2) [default: 0]
+
+  Indexes {
+    (merchant_id, member_uid)
+    (merchant_id, member_uid, status)
+    (merchant_id, transaction_type, member_uid)
+    (merchant_id, transaction_type, created_at)
+    (merchant_id, processed, ledger_type, status, member_uid)
+    (merchant_id, reference_id)
+    (member_uid)
+    (member_uid, transaction_type)
+    (merchant_id)
+    (transaction_type)
+  }
+}
+
+Ref: Pointsledger.member_uid > UniqueCustomers.uid [delete: cascade]
+Ref: Pointsledger.merchant_id > Merchants.merchant_id [delete: cascade]
+
+Table Segments {
+  id int [pk, increment]
+  merchant_id varchar
+  title varchar
+  percent_value int [default: 0]
+  created_at datetime [default: `now()`]
+  segment_uid varchar [unique]
+  updated_at datetime [default: `now()`]
+}
+
+Table SubSegments {
+  id int [pk, increment]
+  merchant_id varchar
+  segment_uid varchar
+  segment_filter varchar
+  number_filter int [default: 0]
+  created_at datetime [default: `now()`]
+  updated_at datetime [default: `now()`]
+  date_filter varchar [note: 'nullable']
+  transaction_end_date varchar [note: 'nullable']
+  transaction_start_date varchar [note: 'nullable']
+  spend_threshold varchar [note: 'nullable']
+}
+
+Table WaysToEarn {
+  id int [pk, increment]
+  merchant_id varchar
+  name varchar
+  points int [default: 0]
+  type WaysType
+  subtype WaysSubtype
+  status WaysStatus [default: 'active']
+  users_rewarded int [default: 0]
+  deleted boolean [default: false]
+  created_at datetime [default: `now()`]
+  updated_at datetime [default: `now()`]
+  earning_type OrdersEarningsType [note: 'nullable']
+  percentage_off decimal(5, 2) [note: 'nullable']
+}
+
+Table Admin {
+  id int [pk, increment]
+  email varchar [unique]
+  password varchar
+  created_at datetime [default: `now()`]
+  updated_at datetime [default: `now()`]
+  firstname varchar [note: 'nullable']
+  lastname varchar [note: 'nullable']
+}
+
+Table UniqueCustomers {
+  id int [pk, increment]
+  name varchar [note: 'nullable']
+  customer_email varchar [unique]
+  phone_number varchar [unique]
+  overall_status OverallCustomerStatus [default: 'inactive']
+  signed_up_at datetime [note: 'nullable']
+  created_at datetime [default: `now()`]
+  date_of_birth datetime [note: 'nullable']
+  uid varchar [unique]
+  updated_at datetime [default: `now()`]
+  merchants_enrolled int [default: 1, note: 'nullable']
+  restriction_reason varchar [note: 'nullable']
+  earned_points int [default: 0, note: 'nullable']
+  points_balance int [default: 0, note: 'nullable']
+  points_spent int [default: 0, note: 'nullable']
+  number_of_transactions int [default: 0, note: 'nullable']
+  password varchar [note: 'nullable']
+  last_admin_edit varchar [note: 'nullable']
+  last_admin_edit_date datetime [note: 'nullable']
+  email_verified boolean [default: false, note: 'nullable']
+  phone_number_verified boolean [default: false, note: 'nullable']
+  restricted_by varchar [default: '', note: 'nullable']
+  date_of_birth_update_count int [default: 0]
+  first_name varchar [note: 'nullable']
+  last_name varchar [note: 'nullable']
+  device_id varchar [note: 'nullable']
+  signed_up boolean [default: false, note: 'nullable']
+}
+
+Table UserWaitlist {
+  id int [pk, increment]
+  email varchar [note: 'nullable']
+  user_type UserEnum
+  created_at datetime [default: `now()`]
+  updated_at datetime [default: `now()`]
+}
+
+Table CustomersAuditLogs {
+  id int [pk, increment]
+  member_uid varchar
+  action_type CustomerAuditType
+  info varchar
+  created_at datetime [default: `now()`]
+  updated_at datetime [default: `now()`]
+  actor_name varchar
+  actor_type ActorTypeEnum
+  admin_email varchar [note: 'nullable']
+  merchant_id varchar [note: 'nullable']
+}
+
+Table MerchantsAuditLogs {
+  id int [pk, increment]
+  merchant_id varchar
+  action_by varchar
+  action_type MerchantAuditType
+  info varchar
+  created_at datetime [default: `now()`]
+  updated_at datetime [default: `now()`]
+}

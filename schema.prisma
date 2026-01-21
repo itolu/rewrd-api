@@ -1,0 +1,512 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_POOLED_URL")
+  directUrl = env("DATABASE_DIRECT_URL")
+}
+
+model Automation {
+  id                Int                @id @default(autoincrement())
+  title             String
+  description       String
+  created_at        DateTime           @default(now())
+  updated_at        DateTime           @default(now())
+  email_body        String?
+  email_subject     String?
+  trigger_when      String?
+  trigger           AutomationTrigger?
+  point_expire_when String?
+}
+
+model AutomationsLog {
+  id               Int                    @id @default(autoincrement())
+  merchant_id      String
+  customer_id      String
+  points           Int?
+  title            String
+  activity         String
+  transaction_type LedgerTransactionType?
+  created_at       DateTime               @default(now())
+  updated_at       DateTime               @default(now())
+  expiration_date  DateTime               @default(now())
+  automation_id    Int?
+  trigger          AutomationTrigger?
+  Customers        UniqueCustomers        @relation(fields: [customer_id], references: [uid])
+}
+
+model Customers {
+  id                     Int             @id @default(autoincrement())
+  merchant_id            String
+  name                   String?
+  phone_number           String
+  hash                   String?
+  created_at             DateTime        @default(now())
+  updated_at             DateTime        @default(now())
+  customer_email         String?
+  points_balance         Decimal         @default(0) @db.Decimal(10, 2)
+  avatar                 String?
+  date_of_birth          DateTime?
+  purchase_count         Int             @default(0)
+  amount_spent           Int             @default(0)
+  uid                    String
+  points_spent           Int?            @default(0)
+  source                 SourceEnum?     @default(offline)
+  spend_threshold_amt    Int             @default(0)
+  total_amt_spent        Int?            @default(0)
+  points_earned          Int?            @default(0)
+  points_expired         Int?            @default(0)
+  signed_up_at           DateTime?
+  status                 CustomerStatus? @default(inactive)
+  number_of_transactions Int?            @default(0)
+  threshold_reached      Boolean?        @default(false)
+  point_expiration_date  DateTime?
+  first_name             String?
+  last_name              String?
+
+  @@index([merchant_id, created_at])
+  @@index([merchant_id, customer_email])
+  @@index([merchant_id, phone_number])
+  @@index([uid])
+  @@index([merchant_id, uid])
+}
+
+model EmailDeliveryLog {
+  id           Int             @id @default(autoincrement())
+  merchant_id  String
+  customer_id  String
+  title        String
+  recipient    String
+  action       EmailAction     @default(opened)
+  action_time  DateTime?
+  created_at   DateTime        @default(now())
+  updated_at   DateTime        @default(now())
+  date_sent    DateTime        @default(now())
+  delivered_at DateTime?       @default(now())
+  email_id     Int
+  opened_at    DateTime?       @default(now())
+  sent_at      DateTime        @default(now())
+  bounced_at   DateTime?       @default(now())
+  clicked_at   DateTime?       @default(now())
+  Customers    UniqueCustomers @relation(fields: [customer_id], references: [uid])
+}
+
+model Emails {
+  id             Int         @id @default(autoincrement())
+  merchant_id    String
+  title          String
+  email_subject  String
+  email_body     String
+  email_type     EmailType   @default(instant)
+  status         EmailStatus @default(sent)
+  scheduled_time DateTime?   @default(now())
+  sent_time      DateTime?   @default(now())
+  cancelled_time DateTime?   @default(now())
+  created_at     DateTime    @default(now())
+  updated_at     DateTime    @default(now())
+  segment_id     Int
+  Segments       Segments    @relation(fields: [segment_id], references: [id])
+}
+
+model KYB {
+  id                             Int                       @id @default(autoincrement())
+  merchant_id                    String                    @unique
+  job_title                      String?
+  dob                            DateTime?
+  identity_type                  IdentityType?
+  identity_number                String?
+  identity_document              String?
+  business_name                  String?
+  business_industry              String?
+  country                        String?
+  state                          String?
+  address                        String?
+  website                        String?
+  description                    String?
+  business_information_submitted Boolean                   @default(false)
+  business_document_submitted    Boolean                   @default(false)
+  created_at                     DateTime                  @default(now())
+  updated_at                     DateTime                  @default(now())
+  comment                        String?
+  registered_business_document   String?
+  registered_business_name       String?
+  registered_business_number     String?
+  utility_bill                   String?
+  business_document_status       BusinessInformationStatus @default(pending)
+  business_information_status    BusinessInformationStatus @default(pending)
+  business_logo                  String?
+
+  @@index([merchant_id])
+}
+
+model Merchants {
+  merchant_id                  String         @unique
+  email                        String         @unique
+  full_name                    String?
+  phone_number                 String
+  created_at                   DateTime       @default(now())
+  updated_at                   DateTime       @default(now())
+  password                     String
+  phone_number_verified        Boolean        @default(false)
+  id                           Int            @id @default(autoincrement())
+  billing_email                String?
+  currency_code                String?
+  reply_to_email               String?
+  sender_name                  String?
+  pin_hash                     String?
+  facebook                     String?        @default("")
+  ig_handle                    String?        @default("")
+  linked_in                    String?        @default("")
+  telegram                     String?        @default("")
+  tiktok                       String?        @default("")
+  whatsapp                     String?        @default("")
+  x_handle                     String?        @default("")
+  youtube                      String?        @default("")
+  snapchat                     String?        @default("")
+  point_balance                Int            @default(0)
+  last_chance_email_countdown  Int            @default(5)
+  minimum_threshold_amount     Int            @default(0)
+  point_should_expire          Boolean        @default(true)
+  reactivation_email_countdown Int            @default(15)
+  point_expiration_date        Int?           @default(180)
+  minimum_threshold_updated_at DateTime?
+  first_name                   String?
+  last_name                    String?
+  Pointsledger                 Pointsledger[]
+
+  @@index([merchant_id])
+}
+
+model Notifications {
+  id          Int      @id @default(autoincrement())
+  merchant_id String?
+  title       String
+  content     String
+  read        Boolean  @default(false)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @default(now())
+}
+
+model Onboard {
+  id           String   @id
+  email        String   @unique
+  full_name    String?
+  phone_number String
+  onboarded    Boolean  @default(false)
+  created_at   DateTime @default(now())
+  updated_at   DateTime @default(now())
+  first_name   String?
+  last_name    String?
+}
+
+model Pointsledger {
+  id                    Int                     @id @default(autoincrement())
+  merchant_id           String
+  member_uid            String?
+  title                 String
+  narration             String?
+  activity              String?
+  ledger_type           PointsLedgerType
+  transaction_type      PointsTransactionType
+  from                  PointsFromTo?
+  to                    PointsFromTo?
+  status                PointsTransactionStatus @default(pending)
+  reference_id          String                  @unique
+  created_at            DateTime                @default(now())
+  updated_at            DateTime                @default(now())
+  channel               PointChannel            @default(offline)
+  order_id              String?
+  percent_value         Decimal?                @db.Decimal(5, 2)
+  points                Decimal                 @default(0) @db.Decimal(10, 2)
+  order_value_ngn       Decimal                 @default(0) @db.Decimal(10, 2)
+  points_balance_after  Decimal                 @default(0) @db.Decimal(10, 2)
+  points_balance_before Decimal                 @default(0) @db.Decimal(10, 2)
+  processed             Boolean                 @default(true)
+  initiated_by          String?
+  payable_value_ngn     Decimal                 @default(0) @db.Decimal(10, 2)
+  UniqueCustomers       UniqueCustomers?        @relation(fields: [member_uid], references: [uid], onDelete: Cascade)
+  Merchants             Merchants               @relation(fields: [merchant_id], references: [merchant_id], onDelete: Cascade)
+
+  @@index([merchant_id, member_uid])
+  @@index([merchant_id, member_uid, status])
+  @@index([merchant_id, transaction_type, member_uid])
+  @@index([merchant_id, transaction_type, created_at])
+  @@index([merchant_id, processed, ledger_type, status, member_uid])
+  @@index([merchant_id, reference_id])
+  @@index([member_uid])
+  @@index([member_uid, transaction_type])
+  @@index([merchant_id])
+  @@index([transaction_type])
+}
+
+model Segments {
+  id            Int      @id @default(autoincrement())
+  merchant_id   String
+  title         String
+  percent_value Int      @default(0)
+  created_at    DateTime @default(now())
+  segment_uid   String   @unique
+  updated_at    DateTime @default(now())
+  Emails        Emails[]
+}
+
+model SubSegments {
+  id                     Int      @id @default(autoincrement())
+  merchant_id            String
+  segment_uid            String
+  segment_filter         String
+  number_filter          Int      @default(0)
+  created_at             DateTime @default(now())
+  updated_at             DateTime @default(now())
+  date_filter            String?
+  transaction_end_date   String?
+  transaction_start_date String?
+  spend_threshold        String?
+}
+
+model WaysToEarn {
+  id             Int                 @id @default(autoincrement())
+  merchant_id    String
+  name           String
+  points         Int                 @default(0)
+  type           WaysType
+  subtype        WaysSubtype
+  status         WaysStatus          @default(active)
+  users_rewarded Int                 @default(0)
+  deleted        Boolean             @default(false)
+  created_at     DateTime            @default(now())
+  updated_at     DateTime            @default(now())
+  earning_type   OrdersEarningsType?
+  percentage_off Decimal?            @db.Decimal(5, 2)
+}
+
+model Admin {
+  id         Int      @id @default(autoincrement())
+  email      String   @unique
+  password   String
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+  firstname  String?
+  lastname   String?
+}
+
+model UniqueCustomers {
+  id                         Int                   @id @default(autoincrement())
+  name                       String?
+  customer_email             String                @unique
+  phone_number               String                @unique
+  overall_status             OverallCustomerStatus @default(inactive)
+  signed_up_at               DateTime?
+  created_at                 DateTime              @default(now())
+  date_of_birth              DateTime?
+  uid                        String                @unique
+  updated_at                 DateTime              @default(now())
+  merchants_enrolled         Int?                  @default(1)
+  restriction_reason         String?
+  earned_points              Int?                  @default(0)
+  points_balance             Int?                  @default(0)
+  points_spent               Int?                  @default(0)
+  number_of_transactions     Int?                  @default(0)
+  password                   String?
+  last_admin_edit            String?
+  last_admin_edit_date       DateTime?
+  email_verified             Boolean?              @default(false)
+  phone_number_verified      Boolean?              @default(false)
+  restricted_by              String?               @default("")
+  date_of_birth_update_count Int                   @default(0)
+  first_name                 String?
+  last_name                  String?
+  device_id                  String?
+  signed_up                  Boolean?              @default(false)
+  AutomationsLog             AutomationsLog[]
+  EmailDeliveryLog           EmailDeliveryLog[]
+  Pointsledger               Pointsledger[]
+}
+
+model UserWaitlist {
+  id         Int      @id @default(autoincrement())
+  email      String?
+  user_type  UserEnum
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+}
+
+model CustomersAuditLogs {
+  id          Int               @id @default(autoincrement())
+  member_uid  String
+  action_type CustomerAuditType
+  info        String
+  created_at  DateTime          @default(now())
+  updated_at  DateTime          @default(now())
+  actor_name  String
+  actor_type  ActorTypeEnum
+  admin_email String?
+  merchant_id String?
+}
+
+model MerchantsAuditLogs {
+  id          Int               @id @default(autoincrement())
+  merchant_id String
+  action_by   String
+  action_type MerchantAuditType
+  info        String
+  created_at  DateTime          @default(now())
+  updated_at  DateTime          @default(now())
+}
+
+enum AutomationTrigger {
+  earning
+  birthday
+  anniversary
+  redemption
+  sign_up
+  point_activation
+  point_reactivation
+  points_expiration
+}
+
+enum BusinessInformationStatus {
+  pending
+  under_review
+  approved
+  rejected
+}
+
+enum CustomerStatus {
+  active
+  inactive
+  restricted
+}
+
+enum EmailAction {
+  opened
+  clicked
+  bounced
+  sent
+  delivered
+}
+
+enum EmailStatus {
+  sent
+  scheduled
+  cancelled
+}
+
+enum EmailType {
+  instant
+  scheduled
+}
+
+enum IdentityType {
+  bvn
+  nin
+  passport
+  voters_card
+}
+
+enum LedgerTransactionType {
+  debit
+  credit
+}
+
+enum OrdersEarningsType {
+  fixed
+  percentage_off
+}
+
+enum PointChannel {
+  online
+  offline
+}
+
+enum PointsFromTo {
+  system
+  merchant
+  member
+}
+
+enum PointsLedgerType {
+  credit
+  debit
+}
+
+enum PointsTransactionStatus {
+  successful
+  pending
+  failed
+}
+
+enum PointsTransactionType {
+  merchant_points_bonus
+  merchant_points_purchase
+  merchant_signup_bonus
+  member_purchase_order_earned_fixed
+  member_purchase_order_earned_percentage
+  member_purchase_order_redeemed
+  member_signup
+  member_birthday
+  member_anniversary
+  member_points_expired
+  merchant_points_order_debit
+  member_points_adjustment_credit
+  member_points_adjustment_debit
+  merchant_points_signup_debit
+  merchant_points_anniversary_debit
+  merchant_points_birthday_debit
+  merchant_to_member_points_adjustment
+}
+
+enum SourceEnum {
+  online
+  offline
+}
+
+enum WaysStatus {
+  active
+  inactive
+}
+
+enum WaysSubtype {
+  signup
+  order
+  birthday
+  anniversary
+}
+
+enum WaysType {
+  task
+  social
+}
+
+enum OverallCustomerStatus {
+  active
+  inactive
+  restricted
+}
+
+enum UserEnum {
+  merchant
+  member
+}
+
+enum CustomerAuditType {
+  admin_details_edit
+  admin_account_restriction
+  account_restriction_by_merchant
+  member_self_edit
+}
+
+enum MerchantAuditType {
+  admin_details_edit
+  admin_account_restriction
+  admin_kyb_approval
+  admin_kyb_rejection
+}
+
+enum ActorTypeEnum {
+  admin
+  merchant
+  member
+}
