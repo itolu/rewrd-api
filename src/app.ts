@@ -37,11 +37,9 @@ app.get("/health", (req: Request, res: Response) => {
 // app.use("/v1", verifyApiKey, routes);
 
 // 404 Handler
-app.use((req: Request, res: Response) => {
-    res.status(404).json({
-        status: false,
-        message: "Endpoint not found",
-    });
+// 404 Handler
+app.use((req: Request, res: Response, next: NextFunction) => {
+    next(new AppError("Endpoint not found", 404, "route_not_found"));
 });
 
 // Global Error Handler

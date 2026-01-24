@@ -8,6 +8,21 @@ datasource db {
   directUrl = env("DATABASE_DIRECT_URL")
 }
 
+model ApiKeys {
+  id          Int      @id @default(autoincrement())
+  merchant_id String
+  key_hash    String   @unique
+  prefix      String
+  env         String
+  created_at  DateTime @default(now())
+  last_used   DateTime?
+
+  Merchants   Merchants @relation(fields: [merchant_id], references: [merchant_id], onDelete: Cascade)
+
+  @@index([key_hash])
+  @@index([merchant_id])
+}
+
 model Automation {
   id                Int                @id @default(autoincrement())
   title             String
@@ -175,6 +190,7 @@ model Merchants {
   first_name                   String?
   last_name                    String?
   Pointsledger                 Pointsledger[]
+  ApiKeys                      ApiKeys[]
 
   @@index([merchant_id])
 }
