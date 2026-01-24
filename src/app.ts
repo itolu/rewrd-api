@@ -7,13 +7,18 @@ import { env } from "./config/env";
 import { errorHandler } from "./middleware/errorHandler";
 import { verifyApiKey } from "./middleware/auth";
 import { addRequestId } from "./middleware/requestId";
+import { apiLimiter } from "./middleware/rateLimiter";
 import { AppError } from "./utils/AppError";
 
 const app = express();
 
+// Trust proxy (required for correct IP rate limiting behind load balancers/proxies)
+app.set("trust proxy", 1);
+
 // Middleware
 app.use(addRequestId);
 app.use(helmet());
+app.use(apiLimiter); // Apply rate limiting globally
 app.use(cors());
 app.use(morgan("dev"));
 app.use(express.json());
