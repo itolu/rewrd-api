@@ -1,12 +1,18 @@
+/// <reference path="./types/express.d.ts" />
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
 import { env } from "./config/env";
+import { errorHandler } from "./middleware/errorHandler";
+import { verifyApiKey } from "./middleware/auth";
+import { addRequestId } from "./middleware/requestId";
+import { AppError } from "./utils/AppError";
 
 const app = express();
 
 // Middleware
+app.use(addRequestId);
 app.use(helmet());
 app.use(cors());
 app.use(morgan("dev"));
@@ -18,8 +24,12 @@ app.get("/health", (req: Request, res: Response) => {
     res.status(200).json({ status: "ok", version: "1.0.0" });
 });
 
+// Authentication (Apply to specific routes or globally as needed)
+// app.use(verifyApiKey);
+
+
 // API Routes (Placeholder)
-// app.use("/v1", routes);
+// app.use("/v1", verifyApiKey, routes);
 
 // 404 Handler
 app.use((req: Request, res: Response) => {
@@ -30,13 +40,6 @@ app.use((req: Request, res: Response) => {
 });
 
 // Global Error Handler
-app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
-    console.error(err.stack);
-    res.status(500).json({
-        status: false,
-        message: "Internal Server Error",
-        error: env.NODE_ENV === "development" ? err.message : undefined,
-    });
-});
+app.use(errorHandler);
 
 export default app;
