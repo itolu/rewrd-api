@@ -9,6 +9,8 @@ import { verifyApiKey } from "./middleware/auth";
 import { addRequestId } from "./middleware/requestId";
 import { apiLimiter } from "./middleware/rateLimiter";
 import { AppError } from "./utils/AppError";
+import swaggerUi from "swagger-ui-express";
+import { specs } from "./docs/swagger";
 
 const app = express();
 
@@ -28,6 +30,12 @@ app.use(express.urlencoded({ extended: true }));
 app.get("/health", (req: Request, res: Response) => {
     res.status(200).json({ status: "ok", version: "1.0.0" });
 });
+
+// Documentation (Development Only)
+if (env.NODE_ENV === "development") {
+    app.use(`/${env.SWAGGER_ROUTE_SECRET}`, swaggerUi.serve, swaggerUi.setup(specs));
+    console.log(`📄 Swagger Docs available at http://localhost:${env.PORT}/${env.SWAGGER_ROUTE_SECRET}`);
+}
 
 // Authentication (Apply to specific routes or globally as needed)
 // app.use(verifyApiKey);

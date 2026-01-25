@@ -11,6 +11,7 @@ const envSchema = z.object({
     DB_NAME: z.string().default("rewrd_db"),
     DB_USER: z.string().default("postgres"),
     DB_PASSWORD: z.string().default("postgres"),
+    SWAGGER_ROUTE_SECRET: z.string().default("api-docs-hidden"),
 });
 
 export const env = envSchema.parse(process.env);

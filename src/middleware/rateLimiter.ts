@@ -20,4 +20,5 @@ export const apiLimiter = rateLimit({
     },
     // Optional: Trust proxy if we are behind a load balancer (need to configure app.set('trust proxy', n))
     // we will handle trust proxy setting in app.ts
+    validate: false
 });
