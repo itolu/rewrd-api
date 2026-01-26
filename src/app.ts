@@ -1,16 +1,16 @@
 /// <reference path="./types/express.d.ts" />
-import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import helmet from "helmet";
-import morgan from "morgan";
 import { env } from "./config/env";
-import { errorHandler } from "./middleware/errorHandler";
+import { specs } from "./docs/swagger";
+import swaggerUi from "swagger-ui-express";
+import { AppError } from "./utils/AppError";
 import { verifyApiKey } from "./middleware/auth";
+import { httpLogger } from "./middleware/httpLogger";
 import { addRequestId } from "./middleware/requestId";
 import { apiLimiter } from "./middleware/rateLimiter";
-import { AppError } from "./utils/AppError";
-import swaggerUi from "swagger-ui-express";
-import { specs } from "./docs/swagger";
+import { errorHandler } from "./middleware/errorHandler";
+import express, { Request, Response, NextFunction } from "express";
 
 const app = express();
 
@@ -20,9 +20,9 @@ app.set("trust proxy", 1);
 // Middleware
 app.use(addRequestId);
 app.use(helmet());
+app.use(httpLogger); // Custom detailed logger (replaces morgan)
 app.use(apiLimiter); // Apply rate limiting globally
 app.use(cors());
-app.use(morgan("dev"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

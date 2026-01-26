@@ -10,7 +10,7 @@ const options: swaggerJsdoc.Options = {
             description: "API Documentation for Rewrd Loyalty Platform",
             contact: {
                 name: "Rewrd Engineering",
-                url: "https://rewrd.co",
+                url: "https://getrewrd.com",
             },
         },
         servers: [
