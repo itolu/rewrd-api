@@ -13,7 +13,10 @@
         "migrate:latest": "knex migrate:latest",
         "migrate:rollback": "knex migrate:rollback",
         "seed:make": "knex seed:make -x ts",
-        "seed:run": "knex seed:run"
+        "seed:run": "knex seed:run",
+        "test": "jest",
+        "test:watch": "jest --watch",
+        "test:coverage": "jest --coverage"
     },
     "keywords": [],
     "author": "",
@@ -36,13 +39,18 @@
     "devDependencies": {
         "@types/cors": "^2.8.17",
         "@types/express": "^4.17.21",
+        "@types/jest": "^30.0.0",
         "@types/morgan": "^1.9.9",
         "@types/node": "^20.12.7",
+        "@types/supertest": "^6.0.3",
         "@types/swagger-jsdoc": "^6.0.4",
         "@types/swagger-ui-express": "^4.1.8",
         "eslint": "^9.0.0",
+        "jest": "^30.2.0",
         "nodemon": "^3.1.0",
         "prettier": "^3.2.5",
+        "supertest": "^7.2.2",
+        "ts-jest": "^29.4.6",
         "ts-node": "^10.9.2",
         "typescript": "^5.4.5"
     }
