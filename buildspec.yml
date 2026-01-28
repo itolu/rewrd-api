@@ -1,0 +1,30 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 18 # Ensure this matches your EB Node version
+    commands:
+      - echo Installing dependencies...
+      - npm ci
+  build:
+    commands:
+      - echo Building the project...
+      - npm run build
+  post_build:
+    commands:
+      - echo Build completed on `date`
+
+artifacts:
+  files:
+    - dist/**/*
+    - src/**/*
+    - knexfile.ts
+    - tsconfig.json
+    - package.json
+    - package-lock.json
+    - Procfile
+    - .ebextensions/**/*
+    - .env.example # Optional: if you use it for reference
+  discard-paths: no
+  base-directory: .
