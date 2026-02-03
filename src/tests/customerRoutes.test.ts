@@ -25,6 +25,7 @@ const mockCustomer = {
     last_name: null,
     date_of_birth: null,
     status: "active",
+    points_balance: 0,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
 };
@@ -37,6 +38,7 @@ const mockCustomerResponse = {
     last_name: null,
     date_of_birth: null,
     status: "active",
+    points_balance: 0,
     created_at: mockCustomer.created_at
 };
 

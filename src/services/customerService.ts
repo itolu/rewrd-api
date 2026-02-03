@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { db } from "../config/db";
 import { AppError } from "../utils/AppError";
+import { logger } from "../utils/logger";
 
 // Define input types for better type safety
 interface CreateCustomerInput {
@@ -44,6 +45,12 @@ export class CustomerService {
     async createOrUpdateCustomer(input: CreateCustomerInput) {
         const { merchant_id, email, phone_number, name, first_name, last_name, date_of_birth } = input;
 
+        logger.info("Creating or updating customer", {
+            merchant_id,
+            phone_number,
+            has_email: !!email,
+        });
+
         // 1. Check if customer exists in `Customers` table for this merchant
         const existingLocalCustomer = await db("Customers")
             .where({ merchant_id })
@@ -54,10 +61,20 @@ export class CustomerService {
             .first();
 
         if (existingLocalCustomer) {
+            logger.info("Found existing local customer", {
+                merchant_id,
+                customer_uid: existingLocalCustomer.uid,
+                phone_number,
+            });
             // Customer already exists for this merchant, return it (or update if needed - for now just return)
             // We might want to update fields here if provided
             return existingLocalCustomer;
         }
+
+        logger.debug("No existing local customer found, checking global UniqueCustomers", {
+            merchant_id,
+            phone_number,
+        });
 
         // 2. Check `UniqueCustomers` (Global check)
         let uniqueCustomer = await db("UniqueCustomers")
@@ -71,6 +88,10 @@ export class CustomerService {
 
         try {
             if (!uniqueCustomer) {
+                logger.info("Creating new UniqueCustomer", {
+                    merchant_id,
+                    phone_number,
+                });
                 // 3a. Create new UniqueCustomer
                 const newUid = `cus_${crypto.randomBytes(8).toString('hex')}`;
                 const [createdUnique] = await trx("UniqueCustomers")
@@ -87,7 +108,18 @@ export class CustomerService {
                     })
                     .returning("*");
                 uniqueCustomer = createdUnique;
+                logger.info("Created new UniqueCustomer", {
+                    merchant_id,
+                    customer_uid: newUid,
+                    phone_number,
+                });
             } else {
+                logger.info("Linking to existing UniqueCustomer", {
+                    merchant_id,
+                    customer_uid: uniqueCustomer.uid,
+                    phone_number,
+                    current_merchants_enrolled: uniqueCustomer.merchants_enrolled,
+                });
                 // 3b. Update existing UniqueCustomer (increment enrolled count)
                 await trx("UniqueCustomers")
                     .where({ uid: uniqueCustomer.uid })
@@ -115,19 +147,28 @@ export class CustomerService {
 
         } catch (error) {
             await trx.rollback();
+            logger.error("Error creating customer, transaction rolled back", {
+                merchant_id,
+                phone_number,
+                error: error instanceof Error ? error.message : String(error),
+            });
             throw error;
         }
     }
 
     async getCustomer(merchant_id: string, uid: string) {
+        logger.debug("Fetching customer", { merchant_id, customer_uid: uid });
+
         const customer = await db("Customers")
             .where({ merchant_id, uid })
             .first();
 
         if (!customer) {
+            logger.warn("Customer not found", { merchant_id, customer_uid: uid });
             throw new AppError("Customer not found", 404, "customer_not_found");
         }
 
+        logger.debug("Customer found", { merchant_id, customer_uid: uid });
         // Optionally join with UniqueCustomers if more data is needed
         // const details = await db("UniqueCustomers").where({ uid }).first();
 
@@ -136,6 +177,8 @@ export class CustomerService {
 
     async updateCustomer(input: UpdateCustomerInput) {
         const { merchant_id, uid, ...updateData } = input;
+
+        logger.info("Updating customer", { merchant_id, customer_uid: uid, fields: Object.keys(updateData) });
 
         const customer = await db("Customers")
             .where({ merchant_id, uid })
@@ -154,6 +197,12 @@ export class CustomerService {
             })
             .returning("*");
 
+        logger.info("Customer updated successfully", {
+            merchant_id,
+            customer_uid: uid,
+            customer_id: updatedCustomer.id
+        });
+
         // Ideally we should also consider if we update UniqueCustomers. 
         // For now, let's keep them separate or sync critical fields if business logic requires.
         // Syncing names/emails back to UniqueCustomers might be dangerous if other merchants rely on it.
@@ -165,6 +214,8 @@ export class CustomerService {
     async listCustomers(filter: ListCustomersFilter) {
         const { merchant_id, page, limit, email, phone_number } = filter;
         const offset = (page - 1) * limit;
+
+        logger.debug("Listing customers", { merchant_id, page, limit, has_email_filter: !!email, has_phone_filter: !!phone_number });
 
         const query = db("Customers").where({ merchant_id });
 
@@ -178,6 +229,8 @@ export class CustomerService {
 
         const total = parseInt(totalResult?.count as string || "0");
         const total_pages = Math.ceil(total / limit);
+
+        logger.debug("Customers listed", { merchant_id, page, limit, total, returned: customers.length });
 
         return {
             data: customers,
@@ -193,6 +246,8 @@ export class CustomerService {
     }
 
     async deleteCustomer(merchant_id: string, uid: string) {
+        logger.info("Deactivating customer", { merchant_id, customer_uid: uid });
+
         // Soft delete or status update? Usually soft delete or inactive
         const customer = await db("Customers")
             .where({ merchant_id, uid })
@@ -205,6 +260,8 @@ export class CustomerService {
         await db("Customers")
             .where({ id: customer.id })
             .update({ status: "inactive", updated_at: new Date() });
+
+        logger.info("Customer deactivated successfully", { merchant_id, customer_uid: uid, customer_id: customer.id });
 
         return { message: "Customer deactivated successfully" };
     }

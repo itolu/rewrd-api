@@ -3,10 +3,13 @@ import { getPagination } from "../utils/pagination";
 import { Request, Response, NextFunction } from "express";
 import { toCustomerResponse } from "../dtos/customer.dto";
 import { customerService } from "../services/customerService";
+import { logger } from "../utils/logger";
 
 export const createOrUpdateCustomer = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const merchantId = req.merchant!.id;
+        logger.info("Customer creation request", { merchant_id: merchantId });
+
         const customer = await customerService.createOrUpdateCustomer({
             merchant_id: merchantId,
             ...req.body
@@ -24,6 +27,7 @@ export const createOrUpdateCustomer = async (req: Request, res: Response, next: 
 
 export const getCustomer = async (req: Request, res: Response, next: NextFunction) => {
     try {
+        logger.debug("Customer fetch request", { merchant_id: req.merchant!.id, customer_uid: req.customer.uid });
         // req.customer is populated by requireCustomer middleware
         res.status(200).json({
             status: true,
