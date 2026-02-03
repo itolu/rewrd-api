@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { db } from "../config/db";
 import { AppError } from "../utils/AppError";
+import { MESSAGES } from "../constants/messages";
 import { Request, Response, NextFunction } from "express";
 
 export const verifyApiKey = async (req: Request, res: Response, next: NextFunction) => {
@@ -8,13 +9,13 @@ export const verifyApiKey = async (req: Request, res: Response, next: NextFuncti
         const authHeader = req.headers.authorization;
 
         if (!authHeader || !authHeader.startsWith("Bearer ")) {
-            throw new AppError("Missing or malformed API key", 401, "invalid_api_key");
+            throw new AppError(MESSAGES.ERROR.AUTH.MISSING_API_KEY, 401, "invalid_api_key");
         }
 
         const apiKey = authHeader.split(" ")[1];
 
         if (!apiKey.startsWith("sk_live_") && !apiKey.startsWith("sk_test_")) {
-            throw new AppError("Invalid API key format", 401, "invalid_api_key");
+            throw new AppError(MESSAGES.ERROR.AUTH.INVALID_API_KEY_FORMAT, 401, "invalid_api_key");
         }
 
         const hashedKey = hashKey(apiKey);
@@ -25,7 +26,7 @@ export const verifyApiKey = async (req: Request, res: Response, next: NextFuncti
             .first();
 
         if (!keyRecord) {
-            throw new AppError("Invalid API key", 401, "invalid_api_key");
+            throw new AppError(MESSAGES.ERROR.AUTH.INVALID_API_KEY, 401, "invalid_api_key");
         }
 
         // Attach merchant context

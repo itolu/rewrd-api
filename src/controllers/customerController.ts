@@ -1,3 +1,4 @@
+import { MESSAGES } from "../constants/messages";
 import { Request, Response, NextFunction } from "express";
 import { customerService } from "../services/customerService";
 
@@ -11,7 +12,7 @@ export const createOrUpdateCustomer = async (req: Request, res: Response, next: 
 
         res.status(200).json({
             status: true,
-            message: "Customer processed successfully",
+            message: MESSAGES.SUCCESS.CUSTOMER.CREATED,
             data: customer,
         });
     } catch (error) {
@@ -72,7 +73,7 @@ export const updateCustomer = async (req: Request, res: Response, next: NextFunc
 
         res.status(200).json({
             status: true,
-            message: "Customer updated successfully",
+            message: MESSAGES.SUCCESS.CUSTOMER.UPDATED,
             data: updated,
         });
     } catch (error) {
@@ -89,7 +90,7 @@ export const deleteCustomer = async (req: Request, res: Response, next: NextFunc
 
         res.status(200).json({
             status: true,
-            message: "Customer deactivated successfully",
+            message: MESSAGES.SUCCESS.CUSTOMER.DELETED,
         });
     } catch (error) {
         next(error);
