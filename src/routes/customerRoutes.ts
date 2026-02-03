@@ -1,8 +1,9 @@
 import { Router } from "express";
+import { requireIdempotency } from "../middleware/idempotency";
+import { requireCustomer } from "../middleware/requireCustomer";
 import { validateRequest } from "../middleware/validateRequest";
 import { createCustomerSchema, getCustomerSchema, listCustomersSchema, updateCustomerSchema } from "../schema/customerSchema";
 import { createOrUpdateCustomer, getCustomer, listCustomers, updateCustomer, deleteCustomer } from "../controllers/customerController";
-import { requireCustomer } from "../middleware/requireCustomer";
 
 const router = Router();
 
@@ -58,6 +59,15 @@ const router = Router();
  *     tags: [Customers]
  *     security:
  *       - BearerAuth: []
+ *     parameters:
+ *       - in: header
+ *         name: Idempotency-Key
+ *         required: true
+ *         schema:
+ *           type: string
+ *           pattern: '^[a-zA-Z0-9_-]{1,100}$'
+ *         description: Unique key for idempotent request handling (alphanumeric, hyphens, underscores, 1-100 chars)
+ *         example: "customer-create-20260203-001"
  *     requestBody:
  *       required: true
  *       content:
@@ -89,11 +99,11 @@ const router = Router();
  *             schema:
  *               $ref: '#/components/schemas/Customer'
  *       400:
- *         description: Validation error
+ *         description: Validation error or missing/invalid Idempotency-Key
  *       401:
  *         description: Unauthorized
  */
-router.post("/", validateRequest(createCustomerSchema), createOrUpdateCustomer);
+router.post("/", requireIdempotency, validateRequest(createCustomerSchema), createOrUpdateCustomer);
 
 /**
  * @swagger

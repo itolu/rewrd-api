@@ -22,6 +22,8 @@ export const MESSAGES = {
             VALIDATION_ERROR: "Validation Error",
             INTERNAL_SERVER_ERROR: "Internal Server Error",
             ROUTE_NOT_FOUND: "Endpoint not found",
+            IDEMPOTENCY_KEY_REQUIRED: "Idempotency-Key header is required for POST requests",
+            INVALID_IDEMPOTENCY_KEY: "Idempotency-Key must be alphanumeric with hyphens or underscores (1-100 characters)",
         }
     }
 };

@@ -53,6 +53,7 @@ describe("Customer Routes", () => {
 
             const res = await request(app)
                 .post("/v1/customers")
+                .set("Idempotency-Key", "test-create-customer-001")
                 .send({
                     email: "test@example.com",
                     phone_number: "1234567890",
@@ -71,6 +72,7 @@ describe("Customer Routes", () => {
         it("should return 400 Validation Error if phone_number is missing", async () => {
             const res = await request(app)
                 .post("/v1/customers")
+                .set("Idempotency-Key", "test-missing-phone-001")
                 .send({
                     email: "test@example.com"
                     // phone_number missing
