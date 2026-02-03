@@ -1,218 +1,252 @@
-import { db } from "../config/db";
-import { AppError } from "../utils/AppError";
-import { customerService } from "../services/customerService";
+import { newDb } from "pg-mem";
 
-// Helper to create a chainable mock object
-const createMockQueryBuilder = () => {
-    const builder: any = {
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        orWhere: jest.fn().mockReturnThis(),
-        first: jest.fn(),
-        insert: jest.fn().mockReturnThis(),
-        update: jest.fn().mockReturnThis(),
-        increment: jest.fn().mockReturnThis(),
-        returning: jest.fn(),
-        count: jest.fn().mockReturnThis(),
-        select: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockReturnThis(),
-        offset: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        clone: jest.fn().mockReturnThis(),
-        then: jest.fn((resolve) => resolve([])), // Allow await
-    };
-    return builder;
-};
+// Create in-memory PostgreSQL database BEFORE any other imports
+const memDb = newDb();
 
-// Create the mock builder instance
-const mockBuilder = createMockQueryBuilder();
+// Create tables with PostgreSQL syntax
+memDb.public.none(`
+    CREATE TABLE "UniqueCustomers" (
+        uid VARCHAR PRIMARY KEY,
+        customer_email VARCHAR,
+        phone_number VARCHAR,
+        name VARCHAR,
+        first_name VARCHAR,
+        last_name VARCHAR,
+        date_of_birth DATE,
+        merchants_enrolled INTEGER DEFAULT 0,
+        overall_status VARCHAR DEFAULT 'active',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
 
-// Mock Transaction object
-const mockTrx = {
-    ...createMockQueryBuilder(),
-    commit: jest.fn(),
-    rollback: jest.fn(),
-};
+    CREATE TABLE "Customers" (
+        id SERIAL PRIMARY KEY,
+        uid VARCHAR NOT NULL,
+        merchant_id VARCHAR NOT NULL,
+        customer_email VARCHAR,
+        phone_number VARCHAR NOT NULL,
+        name VARCHAR,
+        first_name VARCHAR,
+        last_name VARCHAR,
+        date_of_birth DATE,
+        status VARCHAR DEFAULT 'active',
+        source VARCHAR,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+`);
 
-// Mock knex db function
+// Get Knex adapter from pg-mem
+const testDb = memDb.adapters.createKnex();
+
+// Mock the db BEFORE importing CustomerService
 jest.mock("../config/db", () => ({
-    db: jest.fn(() => mockBuilder),
+    db: testDb,
 }));
 
-// We also need to mock db.transaction on the db function itself
-(db as any).transaction = jest.fn(() => mockTrx);
+// NOW import CustomerService (it will use the mocked db)
+import { CustomerService } from "../services/customerService";
+
+let customerService: CustomerService;
+
+beforeAll(async () => {
+    customerService = new CustomerService();
+});
+
+afterAll(async () => {
+    if (testDb) {
+        await testDb.destroy();
+    }
+});
+
+beforeEach(async () => {
+    // Clean tables before each test
+    await testDb("Customers").del();
+    await testDb("UniqueCustomers").del();
+});
 
 describe("CustomerService", () => {
-    beforeEach(() => {
-        jest.clearAllMocks();
-        // Reset mock implementations for commonly used methods
-        mockBuilder.first.mockReset();
-        mockBuilder.returning.mockReset();
-        mockTrx.insert.mockReturnThis();
-        mockTrx.returning.mockReset();
-    });
+    const input = {
+        merchant_id: "mer_123",
+        email: "test@example.com",
+        phone_number: "1234567890",
+        first_name: "John",
+        last_name: "Doe",
+    };
 
     describe("createOrUpdateCustomer", () => {
-        const input = {
-            merchant_id: "mer_1",
-            email: "test@example.com",
-            phone_number: "1234567890",
-            first_name: "Test",
-            last_name: "User"
-        };
-
         it("should return existing local customer if found", async () => {
-            const existing = { id: 1, ...input };
-            mockBuilder.first.mockResolvedValueOnce(existing); // Local customer found
+            // Seed data
+            await testDb("UniqueCustomers").insert({
+                uid: "cus_existing",
+                customer_email: input.email,
+                phone_number: input.phone_number,
+                merchants_enrolled: 1,
+            });
+
+            await testDb("Customers").insert({
+                merchant_id: input.merchant_id,
+                uid: "cus_existing",
+                customer_email: input.email,
+                phone_number: input.phone_number,
+            });
 
             const result = await customerService.createOrUpdateCustomer(input);
 
-            expect(result).toEqual(existing);
-            expect(db).toHaveBeenCalledWith("Customers");
-            expect(mockBuilder.where).toHaveBeenCalledWith({ merchant_id: "mer_1" });
-            // Should NOT verify global or start transaction
-            expect(db).not.toHaveBeenCalledWith("UniqueCustomers");
-            expect((db as any).transaction).not.toHaveBeenCalled();
+            expect(result.uid).toBe("cus_existing");
+            expect(result.customer_email).toBe(input.email);
         });
 
         it("should create new UniqueCustomer and Customer if neither exists", async () => {
-            mockBuilder.first
-                .mockResolvedValueOnce(undefined) // Local not found
-                .mockResolvedValueOnce(undefined); // Global not found
-
-            const newUnique = { uid: "cus_new_123", ...input };
-            const newCustomer = { id: 1, uid: "cus_new_123", ...input };
-
-            // Transaction inserts
-            mockTrx.returning
-                .mockResolvedValueOnce([newUnique]) // Unique insert return
-                .mockResolvedValueOnce([newCustomer]); // Customer insert return
-
             const result = await customerService.createOrUpdateCustomer(input);
 
-            expect(result).toEqual(newCustomer);
-            expect((db as any).transaction).toHaveBeenCalled();
-            // Verify Unique insert
-            expect(mockTrx.insert).toHaveBeenCalledWith(expect.objectContaining({
-                merchants_enrolled: 1,
-                email: undefined // email is mapped to customer_email in logic, check logic
-            }));
-            expect(mockTrx.commit).toHaveBeenCalled();
+            expect(result).toBeDefined();
+            expect(result.customer_email).toBe(input.email);
+            expect(result.phone_number).toBe(input.phone_number);
+
+            // Verify UniqueCustomer was created
+            const uniqueCustomer = await testDb("UniqueCustomers")
+                .where({ uid: result.uid })
+                .first();
+            expect(uniqueCustomer).toBeDefined();
+            expect(uniqueCustomer.merchants_enrolled).toBe(1);
         });
 
         it("should link existing UniqueCustomer to new local Customer", async () => {
-            const unique = { uid: "cus_global_123", merchants_enrolled: 1 };
-
-            mockBuilder.first
-                .mockResolvedValueOnce(undefined) // Local not found
-                .mockResolvedValueOnce(unique);   // Global found
-
-            const newCustomer = { id: 2, uid: "cus_global_123", merchant_id: "mer_1" };
-
-            mockTrx.returning
-                .mockResolvedValueOnce([newCustomer]); // Customer insert return
+            // Create existing UniqueCustomer
+            await testDb("UniqueCustomers").insert({
+                uid: "cus_global_123",
+                customer_email: input.email,
+                phone_number: input.phone_number,
+                merchants_enrolled: 1,
+            });
 
             const result = await customerService.createOrUpdateCustomer(input);
 
-            expect(result).toEqual(newCustomer);
-            expect((db as any).transaction).toHaveBeenCalled();
-            // Should increment enrolled count
-            expect(mockTrx.increment).toHaveBeenCalledWith("merchants_enrolled", 1);
-            // Should insert local customer
-            expect(mockTrx.insert).toHaveBeenCalledWith(expect.objectContaining({
-                uid: "cus_global_123",
-                merchant_id: "mer_1"
-            }));
-            expect(mockTrx.commit).toHaveBeenCalled();
+            expect(result.uid).toBe("cus_global_123");
+
+            // Verify merchants_enrolled was incremented
+            const uniqueCustomer = await testDb("UniqueCustomers")
+                .where({ uid: "cus_global_123" })
+                .first();
+            expect(uniqueCustomer.merchants_enrolled).toBe(2);
         });
 
         it("should rollback transaction on error", async () => {
-            mockBuilder.first
-                .mockResolvedValueOnce(undefined)
-                .mockResolvedValueOnce(undefined);
+            // This will cause an error due to missing required field
+            const invalidInput = { ...input, phone_number: undefined as any };
 
-            // Simulate error during insert
-            mockTrx.insert.mockReturnThis();
-            mockTrx.returning.mockRejectedValue(new Error("DB Error"));
+            await expect(customerService.createOrUpdateCustomer(invalidInput))
+                .rejects.toThrow();
 
-            await expect(customerService.createOrUpdateCustomer(input))
-                .rejects.toThrow("DB Error");
-
-            expect(mockTrx.rollback).toHaveBeenCalled();
+            // Verify no data was inserted
+            const customersCount = await testDb("Customers").count("* as count");
+            expect(parseInt(customersCount[0].count)).toBe(0);
         });
     });
 
     describe("getCustomer", () => {
         it("should return customer if found", async () => {
-            const mockCustomer = { id: 1, uid: "cus_123" };
-            mockBuilder.first.mockResolvedValue(mockCustomer);
+            await testDb("UniqueCustomers").insert({
+                uid: "cus_123",
+                customer_email: "test@example.com",
+                phone_number: "1234567890",
+            });
 
-            const result = await customerService.getCustomer("mer_1", "cus_123");
-            expect(result).toEqual(mockCustomer);
+            const [customer] = await testDb("Customers").insert({
+                merchant_id: "mer_123",
+                uid: "cus_123",
+                customer_email: "test@example.com",
+                phone_number: "1234567890",
+            }).returning("*");
+
+            const result = await customerService.getCustomer("mer_123", customer.uid);
+
+            expect(result.uid).toBe(customer.uid);
         });
 
         it("should throw AppError if not found", async () => {
-            mockBuilder.first.mockResolvedValue(undefined);
-            await expect(customerService.getCustomer("mer_1", "cus_999"))
+            await expect(customerService.getCustomer("mer_123", "nonexistent"))
                 .rejects.toThrow("Customer not found");
         });
     });
 
     describe("updateCustomer", () => {
         it("should update and return customer", async () => {
-            const existing = { id: 1, uid: "cus_123" };
-            const updated = { ...existing, name: "New Name" };
-
-            mockBuilder.first.mockResolvedValue(existing);
-            mockBuilder.returning.mockResolvedValue([updated]);
-
-            const result = await customerService.updateCustomer({
-                merchant_id: "mer_1",
+            await testDb("UniqueCustomers").insert({
                 uid: "cus_123",
-                name: "New Name"
+                customer_email: "old@example.com",
+                phone_number: "1234567890",
             });
 
-            expect(result).toEqual(updated);
-            expect(mockBuilder.update).toHaveBeenCalled();
+            const [customer] = await testDb("Customers").insert({
+                merchant_id: "mer_123",
+                uid: "cus_123",
+                customer_email: "old@example.com",
+                phone_number: "1234567890",
+            }).returning("*");
+
+            const result = await customerService.updateCustomer({
+                merchant_id: "mer_123",
+                uid: customer.uid,
+                first_name: "Jane"
+            });
+
+            expect(result.first_name).toBe("Jane");
         });
 
         it("should throw if customer not found", async () => {
-            mockBuilder.first.mockResolvedValue(undefined);
-            await expect(customerService.updateCustomer({
-                merchant_id: "mer_1",
-                uid: "cus_999"
-            })).rejects.toThrow("Customer not found");
+            await expect(
+                customerService.updateCustomer({ merchant_id: "mer_123", uid: "nonexistent", first_name: "Jane" })
+            ).rejects.toThrow("Customer not found");
         });
     });
 
     describe("listCustomers", () => {
         it("should return paginated result", async () => {
-            // Count query calls `first`.
-            mockBuilder.first.mockResolvedValue({ count: "5" });
+            // Seed multiple customers
+            await testDb("UniqueCustomers").insert([
+                { uid: "cus_1", phone_number: "1111111111" },
+                { uid: "cus_2", phone_number: "2222222222" },
+            ]);
 
-            const customers = [{ id: 1 }, { id: 2 }];
-            mockBuilder.then.mockImplementation((resolve: any) => resolve(customers));
+            await testDb("Customers").insert([
+                { merchant_id: "mer_123", uid: "cus_1", phone_number: "1111111111" },
+                { merchant_id: "mer_123", uid: "cus_2", phone_number: "2222222222" },
+            ]);
 
             const result = await customerService.listCustomers({
-                merchant_id: "mer_1",
+                merchant_id: "mer_123",
                 page: 1,
-                limit: 10
+                limit: 10,
             });
 
-            expect(result.pagination.total).toBe(5);
-            expect(result.data).toHaveLength(2);
+            expect(result.data.length).toBe(2);
+            expect(result.pagination.total).toBe(2);
         });
     });
 
     describe("deleteCustomer", () => {
         it("should soft delete customer", async () => {
-            mockBuilder.first.mockResolvedValue({ id: 1 });
-            mockBuilder.update.mockReturnThis();
+            await testDb("UniqueCustomers").insert({
+                uid: "cus_123",
+                phone_number: "1234567890",
+            });
 
-            const result = await customerService.deleteCustomer("mer_1", "cus_123");
+            const [customer] = await testDb("Customers").insert({
+                merchant_id: "mer_123",
+                uid: "cus_123",
+                phone_number: "1234567890",
+                status: "active",
+            }).returning("*");
 
-            expect(result.message).toContain("deactivated");
-            expect(mockBuilder.update).toHaveBeenCalledWith(expect.objectContaining({ status: "inactive" }));
+            await customerService.deleteCustomer("mer_123", customer.uid);
+
+            const updated = await testDb("Customers")
+                .where({ id: customer.id })
+                .first();
+
+            expect(updated.status).toBe("inactive");
         });
     });
 });

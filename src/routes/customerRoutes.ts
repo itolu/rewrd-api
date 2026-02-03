@@ -15,16 +15,10 @@ const router = Router();
  *       required:
  *         - phone_number
  *       properties:
- *         id:
- *           type: string
- *           description: Internal ID
  *         uid:
  *           type: string
  *           description: Unique Customer ID
- *         merchant_id:
- *           type: string
- *           description: ID of the merchant
- *         customer_email:
+ *         email:
  *           type: string
  *           format: email
  *         phone_number:

@@ -21,8 +21,23 @@ const mockCustomer = {
     email: "test@example.com",
     phone_number: "1234567890",
     name: "Test User",
+    first_name: null,
+    last_name: null,
+    date_of_birth: null,
+    status: "active",
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
+};
+
+const mockCustomerResponse = {
+    uid: "cus_123",
+    email: "test@example.com",
+    phone_number: "1234567890",
+    first_name: null,
+    last_name: null,
+    date_of_birth: null,
+    status: "active",
+    created_at: mockCustomer.created_at
 };
 
 describe("Customer Routes", () => {
@@ -44,11 +59,7 @@ describe("Customer Routes", () => {
 
             expect(res.status).toBe(200);
             expect(res.body.status).toBe(true);
-            expect(res.body.data).toEqual({
-                ...mockCustomer,
-                created_at: mockCustomer.created_at,
-                updated_at: mockCustomer.updated_at
-            });
+            expect(res.body.data).toEqual(mockCustomerResponse);
             expect(customerService.createOrUpdateCustomer).toHaveBeenCalledWith(expect.objectContaining({
                 merchant_id: "mer_test_123",
                 email: "test@example.com"
@@ -88,11 +99,7 @@ describe("Customer Routes", () => {
             const res = await request(app).get("/v1/customers/cus_123");
 
             expect(res.status).toBe(200);
-            expect(res.body.data).toEqual({
-                ...mockCustomer,
-                created_at: mockCustomer.created_at,
-                updated_at: mockCustomer.updated_at
-            });
+            expect(res.body.data).toEqual(mockCustomerResponse);
             expect(customerService.getCustomer).toHaveBeenCalledWith("mer_test_123", "cus_123");
         });
 
@@ -125,6 +132,7 @@ describe("Customer Routes", () => {
 
             expect(res.status).toBe(200);
             expect(res.body.data).toHaveLength(1);
+            expect(res.body.data[0]).toEqual(mockCustomerResponse);
             expect(res.body.pagination).toBeDefined();
             expect(customerService.listCustomers).toHaveBeenCalledWith(expect.objectContaining({
                 merchant_id: "mer_test_123",
@@ -144,7 +152,7 @@ describe("Customer Routes", () => {
                 .send({ name: "Updated Name" });
 
             expect(res.status).toBe(200);
-            expect(res.body.data.name).toBe("Updated Name");
+            expect(res.body.data).toEqual(mockCustomerResponse); // DTO strips name, so same as base response
             expect(customerService.updateCustomer).toHaveBeenCalledWith(expect.objectContaining({
                 merchant_id: "mer_test_123",
                 uid: "cus_123",

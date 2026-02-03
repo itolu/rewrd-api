@@ -1,6 +1,7 @@
 import { MESSAGES } from "../constants/messages";
 import { getPagination } from "../utils/pagination";
 import { Request, Response, NextFunction } from "express";
+import { toCustomerResponse } from "../dtos/customer.dto";
 import { customerService } from "../services/customerService";
 
 export const createOrUpdateCustomer = async (req: Request, res: Response, next: NextFunction) => {
@@ -14,7 +15,7 @@ export const createOrUpdateCustomer = async (req: Request, res: Response, next: 
         res.status(200).json({
             status: true,
             message: MESSAGES.SUCCESS.CUSTOMER.CREATED,
-            data: customer,
+            data: toCustomerResponse(customer),
         });
     } catch (error) {
         next(error);
@@ -27,7 +28,7 @@ export const getCustomer = async (req: Request, res: Response, next: NextFunctio
         res.status(200).json({
             status: true,
             message: MESSAGES.SUCCESS.CUSTOMER.FETCHED,
-            data: req.customer,
+            data: toCustomerResponse(req.customer),
         });
     } catch (error) {
         next(error);
@@ -51,7 +52,8 @@ export const listCustomers = async (req: Request, res: Response, next: NextFunct
         res.status(200).json({
             status: true,
             message: MESSAGES.SUCCESS.CUSTOMER.LISTED,
-            ...result, // data and pagination
+            data: result.data.map(toCustomerResponse),
+            pagination: result.pagination,
         });
     } catch (error) {
         next(error);
@@ -73,7 +75,7 @@ export const updateCustomer = async (req: Request, res: Response, next: NextFunc
         res.status(200).json({
             status: true,
             message: MESSAGES.SUCCESS.CUSTOMER.UPDATED,
-            data: updated,
+            data: toCustomerResponse(updated),
         });
     } catch (error) {
         next(error);
