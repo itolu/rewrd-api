@@ -26,6 +26,7 @@ export const getCustomer = async (req: Request, res: Response, next: NextFunctio
         // req.customer is populated by requireCustomer middleware
         res.status(200).json({
             status: true,
+            message: MESSAGES.SUCCESS.CUSTOMER.FETCHED,
             data: req.customer,
         });
     } catch (error) {
@@ -49,6 +50,7 @@ export const listCustomers = async (req: Request, res: Response, next: NextFunct
 
         res.status(200).json({
             status: true,
+            message: MESSAGES.SUCCESS.CUSTOMER.LISTED,
             ...result, // data and pagination
         });
     } catch (error) {

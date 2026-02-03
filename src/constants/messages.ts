@@ -4,6 +4,8 @@ export const MESSAGES = {
             CREATED: "Customer created successfully",
             UPDATED: "Customer updated successfully",
             DELETED: "Customer deactivated successfully",
+            FETCHED: "Customer fetched successfully",
+            LISTED: "Customers retrieved successfully",
         }
     },
     ERROR: {
