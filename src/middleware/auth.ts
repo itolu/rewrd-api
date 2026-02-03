@@ -1,7 +1,7 @@
-import { Request, Response, NextFunction } from "express";
-import { AppError } from "../utils/AppError";
-import { db } from "../server";
 import crypto from "crypto";
+import { db } from "../config/db";
+import { AppError } from "../utils/AppError";
+import { Request, Response, NextFunction } from "express";
 
 export const verifyApiKey = async (req: Request, res: Response, next: NextFunction) => {
     try {

@@ -41,10 +41,12 @@ if (env.NODE_ENV === "development") {
 // app.use(verifyApiKey);
 
 
-// API Routes (Placeholder)
-// app.use("/v1", verifyApiKey, routes);
+import customerRoutes from "./routes/customerRoutes";
 
-// 404 Handler
+// API Routes
+// Mounting Customer Routes
+app.use("/v1/customers", verifyApiKey, customerRoutes);
+
 // 404 Handler
 app.use((req: Request, res: Response, next: NextFunction) => {
     next(new AppError("Endpoint not found", 404, "route_not_found"));
