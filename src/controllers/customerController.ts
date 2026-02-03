@@ -1,4 +1,5 @@
 import { MESSAGES } from "../constants/messages";
+import { getPagination } from "../utils/pagination";
 import { Request, Response, NextFunction } from "express";
 import { customerService } from "../services/customerService";
 
@@ -22,14 +23,10 @@ export const createOrUpdateCustomer = async (req: Request, res: Response, next: 
 
 export const getCustomer = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const merchantId = req.merchant!.id;
-        const { uid } = req.params;
-
-        const customer = await customerService.getCustomer(merchantId, uid);
-
+        // req.customer is populated by requireCustomer middleware
         res.status(200).json({
             status: true,
-            data: customer,
+            data: req.customer,
         });
     } catch (error) {
         next(error);
@@ -39,8 +36,7 @@ export const getCustomer = async (req: Request, res: Response, next: NextFunctio
 export const listCustomers = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const merchantId = req.merchant!.id;
-        const page = parseInt(req.query.page as string) || 1;
-        const limit = parseInt(req.query.limit as string) || 50;
+        const { page, limit } = getPagination(req.query);
         const { email, phone_number } = req.query;
 
         const result = await customerService.listCustomers({
@@ -65,6 +61,7 @@ export const updateCustomer = async (req: Request, res: Response, next: NextFunc
         const merchantId = req.merchant!.id;
         const { uid } = req.params;
 
+        // Middleware already verified existence
         const updated = await customerService.updateCustomer({
             merchant_id: merchantId,
             uid,

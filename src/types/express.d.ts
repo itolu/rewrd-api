@@ -9,7 +9,8 @@ declare global {
             };
             user?: {
                 id: string; // uid
-            }
+            };
+            customer?: any; // Ideally strictly typed from DB model
         }
     }
 }
