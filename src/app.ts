@@ -19,7 +19,20 @@ app.set("trust proxy", 1);
 
 // Middleware
 app.use(addRequestId);
-app.use(helmet());
+app.use((req, res, next) => {
+    res.setHeader("X-API-Version", "v1.0.0");
+    next();
+});
+app.use(
+    helmet({
+        contentSecurityPolicy: {
+            directives: {
+                ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+                "upgrade-insecure-requests": null,
+            },
+        },
+    })
+);
 app.use(httpLogger); // Custom detailed logger (replaces morgan)
 app.use(apiLimiter); // Apply rate limiting globally
 app.use(cors());
