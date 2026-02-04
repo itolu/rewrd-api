@@ -1,7 +1,8 @@
 import crypto from "crypto";
 import { db } from "../config/db";
-import { AppError } from "../utils/AppError";
 import { logger } from "../utils/logger";
+import { AppError } from "../utils/AppError";
+import { webhookService } from "./webhookService";
 
 // Define input types for better type safety
 interface CreateCustomerInput {
@@ -143,6 +144,11 @@ export class CustomerService {
                 .returning("*");
 
             await trx.commit();
+
+            // Fire webhook asynchronously (fire-and-forget)
+            // We use the newCustomer data which includes the generated ID and timestamps
+            webhookService.sendWebhook(merchant_id, "customer.created", newCustomer);
+
             return newCustomer;
 
         } catch (error) {

@@ -5,17 +5,22 @@ import { hashKey } from "../middleware/auth";
 
 // Mock database
 jest.mock("../config/db", () => {
-    const mKnex = {
+    const createMockKnex = (): any => ({
         where: jest.fn().mockReturnThis(),
         first: jest.fn(),
-        clone: jest.fn().mockReturnThis(),
+        clone: jest.fn(function (this: any): any {
+            // clone() should return a new query builder with all methods
+            return createMockKnex();
+        }),
         count: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         limit: jest.fn().mockReturnThis(),
         offset: jest.fn().mockReturnThis(),
         orderBy: jest.fn().mockReturnThis(),
-    } as any;
-    const mockDb = jest.fn(() => mKnex);
+    } as any);
+
+    const mKnex = createMockKnex();
+    const mockDb = jest.fn(() => createMockKnex());
     return { db: mockDb };
 });
 

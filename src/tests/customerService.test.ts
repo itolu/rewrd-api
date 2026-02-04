@@ -47,6 +47,14 @@ jest.mock("../config/db", () => ({
 // NOW import CustomerService (it will use the mocked db)
 import { CustomerService } from "../services/customerService";
 
+// Mock webhookService to prevent side effects and allow assertion
+jest.mock("../services/webhookService", () => ({
+    webhookService: {
+        sendWebhook: jest.fn(),
+    },
+}));
+import { webhookService } from "../services/webhookService";
+
 let customerService: CustomerService;
 
 beforeAll(async () => {
