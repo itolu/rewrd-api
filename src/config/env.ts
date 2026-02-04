@@ -13,6 +13,7 @@ const envSchema = z.object({
     DB_PASSWORD: z.string().default("postgres"),
     SWAGGER_ROUTE_SECRET: z.string().default("api-docs-hidden"),
     LOG_LEVEL: z.enum(["error", "warn", "info", "http", "verbose", "debug", "silly"]).default("info"),
+    PUBLIC_URL: z.string().optional(),
 });
 
 export const env = envSchema.parse(process.env);
