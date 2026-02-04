@@ -13,6 +13,9 @@ export const MESSAGES = {
             MISSING_API_KEY: "Missing or malformed API key",
             INVALID_API_KEY_FORMAT: "Invalid API key format",
             INVALID_API_KEY: "Invalid API key",
+            MERCHANT_INACTIVE: "Merchant account is inactive",
+            MERCHANT_SUSPENDED: "Merchant account is suspended",
+            MERCHANT_PAYMENT_REQUIRED: "Payment required to continue using the API",
         },
         CUSTOMER: {
             NOT_FOUND: "Customer not found",
