@@ -4,6 +4,7 @@ export const MESSAGES = {
             CREATED: "Customer created successfully",
             UPDATED: "Customer updated successfully",
             RESTRICTED: "Customer restricted successfully",
+            UNRESTRICTED: "Customer unrestricted successfully",
             FETCHED: "Customer fetched successfully",
             LISTED: "Customers retrieved successfully",
         }

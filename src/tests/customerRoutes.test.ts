@@ -190,4 +190,28 @@ describe("Customer Routes", () => {
             expect(customerService.restrictCustomer).not.toHaveBeenCalled();
         });
     });
+
+    describe("PATCH /v1/customers/:uid/unrestrict", () => {
+        it("should unrestrict customer successfully", async () => {
+            (customerService.getCustomer as jest.Mock).mockResolvedValue(mockCustomer);
+            (customerService.unrestrictCustomer as jest.Mock).mockResolvedValue({ message: "Customer unrestricted successfully" });
+
+            const res = await request(app).patch("/v1/customers/cus_123/unrestrict");
+
+            expect(res.status).toBe(200);
+            expect(res.body.message).toBe("Customer unrestricted successfully");
+            expect(customerService.unrestrictCustomer).toHaveBeenCalledWith(mockCustomer);
+        });
+
+        it("should succeed even if customer is already active", async () => {
+            const activeCustomer = { ...mockCustomer, status: "active" };
+            (customerService.getCustomer as jest.Mock).mockResolvedValue(activeCustomer);
+            (customerService.unrestrictCustomer as jest.Mock).mockResolvedValue({ message: "Customer unrestricted successfully" });
+
+            const res = await request(app).patch("/v1/customers/cus_123/unrestrict");
+
+            expect(res.status).toBe(200);
+            expect(res.body.message).toBe("Customer unrestricted successfully");
+        });
+    });
 });

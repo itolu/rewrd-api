@@ -249,4 +249,20 @@ describe("CustomerService", () => {
             status: "restricted"
         }));
     });
+
+    test("unrestrictCustomer should make customer active", async () => {
+        const mockCustomer = { id: 1, uid: "cus_123", merchant_id: "mer_123", status: "restricted", phone_number: "1234567890" };
+
+        // Insert restricted customer
+        await testDb("Customers").insert(mockCustomer);
+
+        await customerService.unrestrictCustomer(mockCustomer);
+
+        const updated = await testDb("Customers").where({ uid: "cus_123" }).first();
+        expect(updated.status).toBe("active");
+
+        expect(webhookService.sendWebhook).toHaveBeenCalledWith("mer_123", "customer.unrestricted", expect.objectContaining({
+            status: "active"
+        }));
+    });
 });

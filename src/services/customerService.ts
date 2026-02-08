@@ -278,6 +278,26 @@ export class CustomerService {
 
         return { message: "Customer restricted successfully" };
     }
+
+    async unrestrictCustomer(customer: any) {
+        logger.info("Unrestricting customer", { merchant_id: customer.merchant_id, customer_uid: customer.uid });
+
+        await db("Customers")
+            .where({ id: customer.id })
+            .update({ status: "active", updated_at: new Date() });
+
+        logger.info("Customer unrestricted successfully", { merchant_id: customer.merchant_id, customer_uid: customer.uid, customer_id: customer.id });
+
+        // Fire webhook
+        webhookService.sendWebhook(customer.merchant_id, "customer.unrestricted", {
+            uid: customer.uid,
+            id: customer.id,
+            status: "active",
+            unrestricted_at: new Date()
+        });
+
+        return { message: "Customer unrestricted successfully" };
+    }
 }
 
 export const customerService = new CustomerService();

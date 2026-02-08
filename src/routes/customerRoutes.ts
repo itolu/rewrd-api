@@ -4,7 +4,7 @@ import { requireCustomer } from "../middleware/requireCustomer";
 import { validateRequest } from "../middleware/validateRequest";
 import { requireActiveCustomer } from "../middleware/requireActiveCustomer";
 import { createCustomerSchema, getCustomerSchema, listCustomersSchema, updateCustomerSchema } from "../schema/customerSchema";
-import { createOrUpdateCustomer, getCustomer, listCustomers, updateCustomer, restrictCustomer } from "../controllers/customerController";
+import { createOrUpdateCustomer, getCustomer, listCustomers, updateCustomer, restrictCustomer, unrestrictCustomer } from "../controllers/customerController";
 
 const router = Router();
 
@@ -248,7 +248,7 @@ router.put("/:uid", validateRequest(updateCustomerSchema), requireCustomer, requ
 
 /**
  * @swagger
- * /customers/{uid}:
+ * /customers/{uid}/restrict:
  *   patch:
  *     summary: Restrict a Customer
  *     tags: [Customers]
@@ -272,5 +272,30 @@ router.put("/:uid", validateRequest(updateCustomerSchema), requireCustomer, requ
  *         description: Unauthorized
  */
 router.patch("/:uid/restrict", validateRequest(getCustomerSchema), requireCustomer, requireActiveCustomer, restrictCustomer); // Reusing get schema for delete (needs uid)
+
+/**
+ * @swagger
+ * /customers/{uid}/unrestrict:
+ *   patch:
+ *     summary: Unrestrict a Customer
+ *     tags: [Customers]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: uid
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Customer UID
+ *     responses:
+ *       200:
+ *         description: Customer unrestricted successfully
+ *       404:
+ *         description: Customer not found
+ *       401:
+ *         description: Unauthorized
+ */
+router.patch("/:uid/unrestrict", validateRequest(getCustomerSchema), requireCustomer, unrestrictCustomer); // Reusing get schema (needs uid)
 
 export default router;

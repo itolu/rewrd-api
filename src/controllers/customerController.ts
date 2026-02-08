@@ -99,3 +99,16 @@ export const restrictCustomer = async (req: Request, res: Response, next: NextFu
         next(error);
     }
 };
+
+export const unrestrictCustomer = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        await customerService.unrestrictCustomer(req.customer);
+
+        res.status(200).json({
+            status: true,
+            message: MESSAGES.SUCCESS.CUSTOMER.UNRESTRICTED,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
