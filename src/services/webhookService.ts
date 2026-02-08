@@ -31,8 +31,7 @@ export class WebhookService {
     private async processWebhook(merchantId: string, event: string, data: any): Promise<void> {
         try {
             // 1. Get merchant webhook config
-            // Note: status, webhook_url, and webhook_secret columns might not exist yet
-            // We fetch essentially 'as any' to check for their existence defensively
+            // 1. Get merchant webhook config
             const merchant = await db("Merchants")
                 .where({ merchant_id: merchantId })
                 .first();
@@ -42,7 +41,6 @@ export class WebhookService {
                 return;
             }
 
-            // Check if webhook_url exists (defensive check for missing column)
             const webhookUrl = merchant.webhook_url;
             const webhookSecret = merchant.webhook_secret;
 

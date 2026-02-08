@@ -16,7 +16,9 @@ export async function seed(knex: Knex): Promise<void> {
         merchant_id: merchantId,
         email: "test@rewrd.co",
         password: "hashed_password_stub",
-        phone_number: "+1234567890"
+        phone_number: "+1234567890",
+        webhook_url: "https://webhook.site/test-webhook-endpoint",
+        webhook_secret: "whsec_test_secret_key_12345"
     });
 
     // 3. Insert Test API Key
