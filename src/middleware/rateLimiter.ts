@@ -14,7 +14,19 @@ export const apiLimiter = rateLimit({
         }
         return req.ip || "unknown_ip";
     },
-    handler: (req, res, next) => {
+    handler: (req, res, next, options) => {
+        // Set Retry-After header manually since we are delegating to error handler
+        // req.rateLimit is populated by express-rate-limit middleware
+        // Cast to any to avoid TypeScript error
+        const request = req as any;
+        if (request.rateLimit) {
+            const resetTime = request.rateLimit.resetTime;
+            if (resetTime) {
+                const retryAfter = Math.ceil((resetTime.getTime() - Date.now()) / 1000);
+                res.set("Retry-After", String(retryAfter));
+            }
+        }
+
         // Use AppError to match our standardized error format
         next(new AppError("Too many requests, please try again later.", 429, "rate_limited"));
     },
