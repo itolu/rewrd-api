@@ -234,27 +234,19 @@ describe("CustomerService", () => {
         });
     });
 
-    describe("deleteCustomer", () => {
-        it("should soft delete customer", async () => {
-            await testDb("UniqueCustomers").insert({
-                uid: "cus_123",
-                phone_number: "1234567890",
-            });
+    test("restrictCustomer should soft delete customer", async () => {
+        const mockCustomer = { id: 1, uid: "cus_123", merchant_id: "mer_123", status: "active", phone_number: "1234567890" };
 
-            const [customer] = await testDb("Customers").insert({
-                merchant_id: "mer_123",
-                uid: "cus_123",
-                phone_number: "1234567890",
-                status: "active",
-            }).returning("*");
+        // Insert customer to be deleted
+        await testDb("Customers").insert(mockCustomer);
 
-            await customerService.deleteCustomer("mer_123", customer.uid);
+        await customerService.restrictCustomer(mockCustomer);
 
-            const updated = await testDb("Customers")
-                .where({ id: customer.id })
-                .first();
+        const updated = await testDb("Customers").where({ uid: "cus_123" }).first();
+        expect(updated.status).toBe("restricted");
 
-            expect(updated.status).toBe("inactive");
-        });
+        expect(webhookService.sendWebhook).toHaveBeenCalledWith("mer_123", "customer.restricted", expect.objectContaining({
+            status: "restricted"
+        }));
     });
 });

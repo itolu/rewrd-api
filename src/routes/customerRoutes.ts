@@ -2,8 +2,9 @@ import { Router } from "express";
 import { requireIdempotency } from "../middleware/idempotency";
 import { requireCustomer } from "../middleware/requireCustomer";
 import { validateRequest } from "../middleware/validateRequest";
+import { requireActiveCustomer } from "../middleware/requireActiveCustomer";
 import { createCustomerSchema, getCustomerSchema, listCustomersSchema, updateCustomerSchema } from "../schema/customerSchema";
-import { createOrUpdateCustomer, getCustomer, listCustomers, updateCustomer, deleteCustomer } from "../controllers/customerController";
+import { createOrUpdateCustomer, getCustomer, listCustomers, updateCustomer, restrictCustomer } from "../controllers/customerController";
 
 const router = Router();
 
@@ -243,13 +244,13 @@ router.get("/:uid", validateRequest(getCustomerSchema), requireCustomer, getCust
  *       401:
  *         description: Unauthorized
  */
-router.put("/:uid", validateRequest(updateCustomerSchema), requireCustomer, updateCustomer);
+router.put("/:uid", validateRequest(updateCustomerSchema), requireCustomer, requireActiveCustomer, updateCustomer);
 
 /**
  * @swagger
  * /customers/{uid}:
- *   delete:
- *     summary: Deactivate a Customer
+ *   patch:
+ *     summary: Restrict a Customer
  *     tags: [Customers]
  *     security:
  *       - BearerAuth: []
@@ -262,12 +263,14 @@ router.put("/:uid", validateRequest(updateCustomerSchema), requireCustomer, upda
  *         description: Customer UID
  *     responses:
  *       200:
- *         description: Customer deactivated successfully
+ *         description: Customer restricted successfully
  *       404:
  *         description: Customer not found
+ *       403:
+ *         description: Customer is not active
  *       401:
  *         description: Unauthorized
  */
-router.delete("/:uid", validateRequest(getCustomerSchema), requireCustomer, deleteCustomer); // Reusing get schema for delete (needs uid)
+router.patch("/:uid/restrict", validateRequest(getCustomerSchema), requireCustomer, requireActiveCustomer, restrictCustomer); // Reusing get schema for delete (needs uid)
 
 export default router;

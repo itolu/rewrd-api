@@ -73,6 +73,7 @@ export const updateCustomer = async (req: Request, res: Response, next: NextFunc
         const updated = await customerService.updateCustomer({
             merchant_id: merchantId,
             uid,
+            existingCustomer: req.customer,
             ...req.body
         });
 
@@ -86,16 +87,13 @@ export const updateCustomer = async (req: Request, res: Response, next: NextFunc
     }
 };
 
-export const deleteCustomer = async (req: Request, res: Response, next: NextFunction) => {
+export const restrictCustomer = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const merchantId = req.merchant!.id;
-        const { uid } = req.params;
-
-        await customerService.deleteCustomer(merchantId, uid);
+        await customerService.restrictCustomer(req.customer);
 
         res.status(200).json({
             status: true,
-            message: MESSAGES.SUCCESS.CUSTOMER.DELETED,
+            message: MESSAGES.SUCCESS.CUSTOMER.RESTRICTED,
         });
     } catch (error) {
         next(error);

@@ -149,6 +149,7 @@ describe("Customer Routes", () => {
     describe("PUT /v1/customers/:uid", () => {
         it("should update customer successfully", async () => {
             const updatedCustomer = { ...mockCustomer, name: "Updated Name" };
+            (customerService.getCustomer as jest.Mock).mockResolvedValue(mockCustomer); // Mock existence check
             (customerService.updateCustomer as jest.Mock).mockResolvedValue(updatedCustomer);
 
             const res = await request(app)
@@ -160,19 +161,33 @@ describe("Customer Routes", () => {
             expect(customerService.updateCustomer).toHaveBeenCalledWith(expect.objectContaining({
                 merchant_id: "mer_test_123",
                 uid: "cus_123",
-                name: "Updated Name"
+                name: "Updated Name",
+                existingCustomer: expect.anything() // Middleware attaches it
             }));
         });
     });
 
-    describe("DELETE /v1/customers/:uid", () => {
-        it("should deactivate customer successfully", async () => {
-            (customerService.deleteCustomer as jest.Mock).mockResolvedValue({ message: "Deactivated" });
+    describe("PATCH /v1/customers/:uid/restrict", () => {
+        it("should restrict customer successfully", async () => {
+            (customerService.getCustomer as jest.Mock).mockResolvedValue(mockCustomer); // Mock existence check
+            (customerService.restrictCustomer as jest.Mock).mockResolvedValue({ message: "Customer restricted successfully" });
 
-            const res = await request(app).delete("/v1/customers/cus_123");
+            const res = await request(app).patch("/v1/customers/cus_123/restrict");
 
             expect(res.status).toBe(200);
-            expect(customerService.deleteCustomer).toHaveBeenCalledWith("mer_test_123", "cus_123");
+            expect(res.body.message).toBe("Customer restricted successfully");
+            expect(customerService.restrictCustomer).toHaveBeenCalledWith(mockCustomer);
+        });
+
+        it("should return 403 if customer is not active", async () => {
+            const inactiveCustomer = { ...mockCustomer, status: "inactive" };
+            (customerService.getCustomer as jest.Mock).mockResolvedValue(inactiveCustomer);
+
+            const res = await request(app).patch("/v1/customers/cus_123/restrict");
+
+            expect(res.status).toBe(403);
+            expect(res.body.message).toBe("Customer is not active");
+            expect(customerService.restrictCustomer).not.toHaveBeenCalled();
         });
     });
 });

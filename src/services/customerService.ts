@@ -24,6 +24,7 @@ interface UpdateCustomerInput {
     date_of_birth?: Date;
     phone_number?: string;
     email?: string;
+    existingCustomer?: any; // Optional pre-fetched customer
 }
 
 interface ListCustomersFilter {
@@ -182,16 +183,20 @@ export class CustomerService {
     }
 
     async updateCustomer(input: UpdateCustomerInput) {
-        const { merchant_id, uid, ...updateData } = input;
+        const { merchant_id, uid, existingCustomer, ...updateData } = input;
 
-        logger.info("Updating customer", { merchant_id, customer_uid: uid, fields: Object.keys(updateData) });
+        logger.info("Updating customer", { merchant_id, customer_uid: uid, has_existing: !!existingCustomer });
 
-        const customer = await db("Customers")
-            .where({ merchant_id, uid })
-            .first();
+        let customer = existingCustomer;
 
         if (!customer) {
-            throw new AppError("Customer not found", 404, "customer_not_found");
+            customer = await db("Customers")
+                .where({ merchant_id, uid })
+                .first();
+
+            if (!customer) {
+                throw new AppError("Customer not found", 404, "customer_not_found");
+            }
         }
 
         // Update Customers table
@@ -208,6 +213,9 @@ export class CustomerService {
             customer_uid: uid,
             customer_id: updatedCustomer.id
         });
+
+        // Fire webhook
+        webhookService.sendWebhook(merchant_id, "customer.updated", updatedCustomer);
 
         // Ideally we should also consider if we update UniqueCustomers. 
         // For now, let's keep them separate or sync critical fields if business logic requires.
@@ -251,25 +259,24 @@ export class CustomerService {
         };
     }
 
-    async deleteCustomer(merchant_id: string, uid: string) {
-        logger.info("Deactivating customer", { merchant_id, customer_uid: uid });
-
-        // Soft delete or status update? Usually soft delete or inactive
-        const customer = await db("Customers")
-            .where({ merchant_id, uid })
-            .first();
-
-        if (!customer) {
-            throw new AppError("Customer not found", 404, "customer_not_found");
-        }
+    async restrictCustomer(customer: any) {
+        logger.info("Restricting customer", { merchant_id: customer.merchant_id, customer_uid: customer.uid });
 
         await db("Customers")
             .where({ id: customer.id })
-            .update({ status: "inactive", updated_at: new Date() });
+            .update({ status: "restricted", updated_at: new Date() });
 
-        logger.info("Customer deactivated successfully", { merchant_id, customer_uid: uid, customer_id: customer.id });
+        logger.info("Customer restricted successfully", { merchant_id: customer.merchant_id, customer_uid: customer.uid, customer_id: customer.id });
 
-        return { message: "Customer deactivated successfully" };
+        // Fire webhook
+        webhookService.sendWebhook(customer.merchant_id, "customer.restricted", {
+            uid: customer.uid,
+            id: customer.id,
+            status: "restricted",
+            restricted_at: new Date()
+        });
+
+        return { message: "Customer restricted successfully" };
     }
 }
 

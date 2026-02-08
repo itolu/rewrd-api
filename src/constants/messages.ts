@@ -3,7 +3,7 @@ export const MESSAGES = {
         CUSTOMER: {
             CREATED: "Customer created successfully",
             UPDATED: "Customer updated successfully",
-            DELETED: "Customer deactivated successfully",
+            RESTRICTED: "Customer restricted successfully",
             FETCHED: "Customer fetched successfully",
             LISTED: "Customers retrieved successfully",
         }
@@ -20,6 +20,7 @@ export const MESSAGES = {
         CUSTOMER: {
             NOT_FOUND: "Customer not found",
             ID_REQUIRED: "Customer ID is required",
+            NOT_ACTIVE: "Customer is not active",
         },
         COMMON: {
             VALIDATION_ERROR: "Validation Error",
