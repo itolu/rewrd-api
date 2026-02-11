@@ -9,14 +9,20 @@ export const MESSAGES = {
             LISTED: "Customers retrieved successfully",
         }
     },
+    MERCHANT: {
+        CONFIG_FETCHED: "Merchant configuration retrieved successfully",
+        CONFIG_UPDATED: "Merchant configuration updated successfully",
+        RULES_FETCHED: "Earning rules retrieved successfully",
+        RULE_FETCHED: "Earning rule retrieved successfully",
+        RULE_NOT_FOUND: "Earning rule not found",
+    },
     ERROR: {
         AUTH: {
             MISSING_API_KEY: "Missing or malformed API key",
             INVALID_API_KEY_FORMAT: "Invalid API key format",
             INVALID_API_KEY: "Invalid API key",
             MERCHANT_INACTIVE: "Merchant account is inactive",
-            MERCHANT_SUSPENDED: "Merchant account is suspended",
-            MERCHANT_PAYMENT_REQUIRED: "Payment required to continue using the API",
+            MERCHANT_RESTRICTED: "Merchant account is restricted",
         },
         CUSTOMER: {
             NOT_FOUND: "Customer not found",

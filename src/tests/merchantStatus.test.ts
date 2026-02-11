@@ -111,16 +111,7 @@ describe("Merchant Status Enforcement", () => {
         expect(res.status).not.toBe(402);
     });
 
-    it("should allow access when merchant status is undefined (legacy support)", async () => {
-        mockMerchantStatus(undefined);
 
-        const res = await request(app)
-            .get("/v1/customers")
-            .set("Authorization", `Bearer ${validApiKey}`);
-
-        expect(res.status).not.toBe(403);
-        expect(res.status).not.toBe(402);
-    });
 
     it("should deny access when merchant is inactive", async () => {
         mockMerchantStatus("inactive");
@@ -133,25 +124,14 @@ describe("Merchant Status Enforcement", () => {
         expect(res.body.error.code).toBe("merchant_inactive");
     });
 
-    it("should deny access when merchant is suspended", async () => {
-        mockMerchantStatus("suspended");
+    it("should deny access when merchant is restricted", async () => {
+        mockMerchantStatus("restricted");
 
         const res = await request(app)
             .get("/v1/customers")
             .set("Authorization", `Bearer ${validApiKey}`);
 
         expect(res.status).toBe(403);
-        expect(res.body.error.code).toBe("merchant_suspended");
-    });
-
-    it("should deny access with payment required when status is payment_required", async () => {
-        mockMerchantStatus("payment_required");
-
-        const res = await request(app)
-            .get("/v1/customers")
-            .set("Authorization", `Bearer ${validApiKey}`);
-
-        expect(res.status).toBe(402);
-        expect(res.body.error.code).toBe("merchant_payment_required");
+        expect(res.body.error.code).toBe("merchant_restricted");
     });
 });

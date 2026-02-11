@@ -42,33 +42,22 @@ export const verifyApiKey = async (req: Request, res: Response, next: NextFuncti
         }
 
         // Check merchant status
-        if (merchant.status) {
-            if (merchant.status === "inactive") {
-                logger.warn("Access attempt by inactive merchant", { merchant_id: merchant.merchant_id, status: merchant.status });
-                throw new AppError(
-                    MESSAGES.ERROR.AUTH.MERCHANT_INACTIVE,
-                    403,
-                    "merchant_inactive"
-                );
-            }
+        if (merchant.status === "inactive") {
+            logger.warn("Access attempt by inactive merchant", { merchant_id: merchant.merchant_id, status: merchant.status });
+            throw new AppError(
+                MESSAGES.ERROR.AUTH.MERCHANT_INACTIVE,
+                403,
+                "merchant_inactive"
+            );
+        }
 
-            if (merchant.status === "suspended") {
-                logger.warn("Access attempt by suspended merchant", { merchant_id: merchant.merchant_id, status: merchant.status });
-                throw new AppError(
-                    MESSAGES.ERROR.AUTH.MERCHANT_SUSPENDED,
-                    403,
-                    "merchant_suspended"
-                );
-            }
-
-            if (merchant.status === "payment_required") {
-                logger.warn("Access attempt by merchant requiring payment", { merchant_id: merchant.merchant_id, status: merchant.status });
-                throw new AppError(
-                    MESSAGES.ERROR.AUTH.MERCHANT_PAYMENT_REQUIRED,
-                    402,
-                    "merchant_payment_required"
-                );
-            }
+        if (merchant.status === "restricted") {
+            logger.warn("Access attempt by restricted merchant", { merchant_id: merchant.merchant_id, status: merchant.status });
+            throw new AppError(
+                MESSAGES.ERROR.AUTH.MERCHANT_RESTRICTED,
+                403,
+                "merchant_restricted"
+            );
         }
 
         // Attach merchant context
