@@ -14,6 +14,14 @@ const options: swaggerJsdoc.Options = {
             },
         },
         servers: [
+            ...(env.PUBLIC_URL
+                ? [
+                    {
+                        url: `${env.PUBLIC_URL}/v1`,
+                        description: "Production Server",
+                    },
+                ]
+                : []),
             {
                 url: `http://localhost:${env.PORT}/v1`,
                 description: "Development Server",

@@ -8,7 +8,7 @@ const hashKey = (key: string): string => {
 export async function seed(knex: Knex): Promise<void> {
     // 1. Clear existing entries (optional, careful in prod)
     await knex("ApiKeys").del();
-    await knex("Merchants").del();
+    // await knex("Merchants").del();
 
     // 2. Insert Test Merchant
     const merchantId = "mer_test_123";

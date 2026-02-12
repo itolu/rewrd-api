@@ -8,7 +8,7 @@ export const createCustomerSchema = z.object({
         first_name: z.string().optional(),
         last_name: z.string().optional(),
         date_of_birth: z.string().datetime().optional().or(z.date().optional()), // Accept ISO string or Date object
-    }).refine((data) => data.email || data.phone_number, {
+    }).strict().refine((data) => data.email || data.phone_number, {
         message: "Either email or phone number must be provided",
         path: ["email"], // Attach error to email field
     }),
@@ -17,7 +17,7 @@ export const createCustomerSchema = z.object({
 export const updateCustomerSchema = z.object({
     params: z.object({
         uid: z.string().min(1, "Customer UID is required"),
-    }),
+    }).strict(),
     body: z.object({
         email: z.string().email().optional(),
         phone_number: z.string().min(10).optional(),
@@ -25,13 +25,13 @@ export const updateCustomerSchema = z.object({
         first_name: z.string().optional(),
         last_name: z.string().optional(),
         date_of_birth: z.string().datetime().optional().or(z.date().optional()),
-    }),
+    }).strict(),
 });
 
 export const getCustomerSchema = z.object({
     params: z.object({
         uid: z.string().min(1, "Customer UID is required"),
-    }),
+    }).strict(),
 });
 
 export const listCustomersSchema = z.object({
@@ -40,5 +40,5 @@ export const listCustomersSchema = z.object({
         limit: z.string().regex(/^\d+$/).transform(Number).optional(),
         email: z.string().optional(),
         phone_number: z.string().optional(),
-    }),
+    }).strict(),
 });
