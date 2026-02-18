@@ -165,6 +165,8 @@ const router = Router();
  *           type: integer
  *         total_points_balance:
  *           type: number
+ *         total_transactions:
+ *           type: integer
  */
 
 /**

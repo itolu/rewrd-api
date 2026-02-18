@@ -193,12 +193,20 @@ export class MerchantService {
         }
         const totalBalance = await balanceQuery.sum("points_balance as total").first();
 
+        // Total Transactions in period
+        const transactionQuery = db("Pointsledger").where({ merchant_id });
+        if (startDate) {
+            transactionQuery.andWhere('created_at', '>=', startDate);
+        }
+        const totalTransactions = await transactionQuery.count("id as count").first();
+
         return {
             period,
             total_earned: Number(ledgerStats?.total_earned || 0),
             total_redeemed: Number(ledgerStats?.total_redeemed || 0),
             active_customers: Number(activeCustomers?.count || 0),
-            total_points_balance: Number(totalBalance?.total || 0)
+            total_points_balance: Number(totalBalance?.total || 0),
+            total_transactions: Number(totalTransactions?.count || 0)
         };
     }
 }
