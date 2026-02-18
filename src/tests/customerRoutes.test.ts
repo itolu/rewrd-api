@@ -69,6 +69,25 @@ describe("Customer Routes", () => {
             }));
         });
 
+        it("should succeed with the user's exact reported body", async () => {
+            (customerService.createOrUpdateCustomer as jest.Mock).mockResolvedValue(mockCustomer);
+
+            const res = await request(app)
+                .post("/v1/customers")
+                .set("Idempotency-Key", "user-repro-key")
+                .send({
+                    "email": "user@example.com",
+                    "phone_number": "09092923990",
+                    "name": "string",
+                    "first_name": "string",
+                    "last_name": "string",
+                    "date_of_birth": "2026-02-12T04:49:03.933Z"
+                });
+
+            console.log("USER REPRO RESPONSE:", JSON.stringify(res.body, null, 2));
+            expect(res.status).toBe(200);
+        });
+
         it("should return 400 Validation Error if phone_number is missing", async () => {
             const res = await request(app)
                 .post("/v1/customers")

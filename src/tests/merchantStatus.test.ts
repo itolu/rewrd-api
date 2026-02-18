@@ -92,7 +92,15 @@ describe("Merchant Status Enforcement", () => {
                     })
                 };
             }
-            return { where: jest.fn().mockReturnThis(), first: jest.fn().mockReturnThis() };
+            return {
+                where: jest.fn().mockReturnThis(),
+                first: jest.fn().mockReturnThis(),
+                select: jest.fn().mockReturnThis(),
+                orderBy: jest.fn().mockReturnThis(),
+                limit: jest.fn().mockReturnThis(),
+                offset: jest.fn().mockReturnThis(),
+                count: jest.fn().mockReturnThis(),
+            };
         });
     };
 

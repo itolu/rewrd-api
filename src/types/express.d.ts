@@ -11,6 +11,7 @@ declare global {
                 id: string; // uid
             };
             customer?: any; // Ideally strictly typed from DB model
+            merchantRecord?: any; // Full merchant row from DB, set by requireMerchant middleware
         }
     }
 }

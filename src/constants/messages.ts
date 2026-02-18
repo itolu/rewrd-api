@@ -15,6 +15,7 @@ export const MESSAGES = {
         RULES_FETCHED: "Earning rules retrieved successfully",
         RULE_FETCHED: "Earning rule retrieved successfully",
         RULE_NOT_FOUND: "Earning rule not found",
+        NOT_FOUND: "Merchant not found",
     },
     ERROR: {
         AUTH: {

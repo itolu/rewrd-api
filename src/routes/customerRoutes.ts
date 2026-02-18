@@ -14,33 +14,31 @@ const router = Router();
  *   schemas:
  *     Customer:
  *       type: object
- *       required:
- *         - phone_number
  *       properties:
  *         uid:
  *           type: string
- *           description: Unique Customer ID
  *         email:
  *           type: string
  *           format: email
+ *           nullable: true
  *         phone_number:
- *           type: string
- *         name:
  *           type: string
  *         first_name:
  *           type: string
+ *           nullable: true
  *         last_name:
  *           type: string
+ *           nullable: true
  *         date_of_birth:
  *           type: string
  *           format: date
+ *           nullable: true
  *         status:
  *           type: string
- *           enum: [active, inactive]
+ *           enum: [active, inactive, restricted]
+ *         points_balance:
+ *           type: number
  *         created_at:
- *           type: string
- *           format: date-time
- *         updated_at:
  *           type: string
  *           format: date-time
  */
@@ -83,8 +81,6 @@ const router = Router();
  *                 format: email
  *               phone_number:
  *                 type: string
- *               name:
- *                 type: string
  *               first_name:
  *                 type: string
  *               last_name:
@@ -98,7 +94,14 @@ const router = Router();
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/Customer'
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   $ref: '#/components/schemas/Customer'
  *       400:
  *         description: Validation error or missing/invalid Idempotency-Key
  *       401:
@@ -190,7 +193,14 @@ router.get("/", validateRequest(listCustomersSchema), listCustomers);
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/Customer'
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   $ref: '#/components/schemas/Customer'
  *       404:
  *         description: Customer not found
  *       401:
@@ -224,8 +234,6 @@ router.get("/:uid", validateRequest(getCustomerSchema), requireCustomer, getCust
  *                 type: string
  *               phone_number:
  *                 type: string
- *               name:
- *                 type: string
  *               first_name:
  *                 type: string
  *               last_name:
@@ -238,7 +246,14 @@ router.get("/:uid", validateRequest(getCustomerSchema), requireCustomer, getCust
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/Customer'
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   $ref: '#/components/schemas/Customer'
  *       404:
  *         description: Customer not found
  *       401:

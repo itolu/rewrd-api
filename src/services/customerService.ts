@@ -133,14 +133,14 @@ export class CustomerService {
                 .insert({
                     merchant_id,
                     uid: uniqueCustomer.uid,
-                    customer_email: email || uniqueCustomer.customer_email, // Fallback to unique customer email if null
+                    customer_email: email || uniqueCustomer.customer_email,
                     phone_number: phone_number,
                     name: name || uniqueCustomer.name,
                     first_name: first_name || uniqueCustomer.first_name,
                     last_name: last_name || uniqueCustomer.last_name,
                     date_of_birth: date_of_birth || uniqueCustomer.date_of_birth,
                     status: "active",
-                    source: "online", // Default or passed in
+                    source: "online",
                 })
                 .returning("*");
 
@@ -231,13 +231,16 @@ export class CustomerService {
 
         logger.debug("Listing customers", { merchant_id, page, limit, has_email_filter: !!email, has_phone_filter: !!phone_number });
 
-        const query = db("Customers").where({ merchant_id });
+        // Base query function to ensure clean state
+        const getBaseQuery = () => {
+            const query = db("Customers").where({ merchant_id });
+            if (email) query.where("customer_email", "like", `%${email}%`);
+            if (phone_number) query.where("phone_number", "like", `%${phone_number}%`);
+            return query;
+        };
 
-        if (email) query.where("customer_email", "like", `%${email}%`);
-        if (phone_number) query.where("phone_number", "like", `%${phone_number}%`);
-
-        const countQuery = query.clone().count<{ count: string }[]>("id as count").first();
-        const dataQuery = query.select("*").limit(limit).offset(offset).orderBy("created_at", "desc");
+        const countQuery = getBaseQuery().count<{ count: string }[]>("id as count").first();
+        const dataQuery = getBaseQuery().select("*").limit(limit).offset(offset).orderBy("created_at", "desc");
 
         const [totalResult, customers] = await Promise.all([countQuery, dataQuery]);
 

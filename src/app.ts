@@ -42,10 +42,12 @@ if (env.NODE_ENV === "development") {
 
 
 import customerRoutes from "./routes/customerRoutes";
+import merchantRoutes from "./routes/merchantRoutes";
 
 // API Routes
 // Mounting Customer Routes
 app.use("/v1/customers", verifyApiKey, customerRoutes);
+app.use("/v1/merchant", verifyApiKey, merchantRoutes);
 
 // 404 Handler
 app.use((req: Request, res: Response, next: NextFunction) => {
