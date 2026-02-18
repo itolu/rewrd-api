@@ -188,36 +188,17 @@ Ref: AutomationsLog.customer_id > UniqueCustomers.uid
 Table Customers {
   id int [pk, increment]
   merchant_id varchar
-  name varchar [note: 'nullable']
-  phone_number varchar
-  hash varchar [note: 'nullable']
   created_at datetime [default: `now()`]
   updated_at datetime [default: `now()`]
-  customer_email varchar [note: 'nullable']
   points_balance decimal(10, 2) [default: 0]
-  avatar varchar [note: 'nullable']
-  date_of_birth datetime [note: 'nullable']
-  purchase_count int [default: 0]
-  amount_spent int [default: 0]
   uid varchar
-  points_spent int [default: 0, note: 'nullable']
   source SourceEnum [default: 'offline', note: 'nullable']
-  spend_threshold_amt int [default: 0]
-  total_amt_spent int [default: 0, note: 'nullable']
-  points_earned int [default: 0, note: 'nullable']
-  points_expired int [default: 0, note: 'nullable']
   signed_up_at datetime [note: 'nullable']
   status CustomerStatus [default: 'inactive', note: 'nullable']
-  number_of_transactions int [default: 0, note: 'nullable']
-  threshold_reached boolean [default: false, note: 'nullable']
   point_expiration_date datetime [note: 'nullable']
-  first_name varchar [note: 'nullable']
-  last_name varchar [note: 'nullable']
 
   Indexes {
     (merchant_id, created_at)
-    (merchant_id, customer_email)
-    (merchant_id, phone_number)
     (uid)
     (merchant_id, uid)
   }

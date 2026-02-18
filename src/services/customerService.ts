@@ -53,14 +53,21 @@ export class CustomerService {
             has_email: !!email,
         });
 
-        // 1. Check if customer exists in `Customers` table for this merchant
-        const existingLocalCustomer = await db("Customers")
-            .where({ merchant_id })
-            .andWhere((builder) => {
+        // 1. Check `UniqueCustomers` (Global check)
+        let uniqueCustomer = await db("UniqueCustomers")
+            .where((builder) => {
                 if (email) builder.where({ customer_email: email });
                 builder.orWhere({ phone_number: phone_number });
             })
             .first();
+
+        // 2. If unique customer exists, check if they are already linked to this merchant
+        let existingLocalCustomer = null;
+        if (uniqueCustomer) {
+            existingLocalCustomer = await db("Customers")
+                .where({ merchant_id, uid: uniqueCustomer.uid })
+                .first();
+        }
 
         if (existingLocalCustomer) {
             logger.info("Found existing local customer", {
@@ -68,23 +75,13 @@ export class CustomerService {
                 customer_uid: existingLocalCustomer.uid,
                 phone_number,
             });
-            // Customer already exists for this merchant, return it (or update if needed - for now just return)
-            // We might want to update fields here if provided
-            return existingLocalCustomer;
+
+            // Return combined data (local + unique)
+            return {
+                ...existingLocalCustomer,
+                ...uniqueCustomer // Spread unique details (name, email, etc.)
+            };
         }
-
-        logger.debug("No existing local customer found, checking global UniqueCustomers", {
-            merchant_id,
-            phone_number,
-        });
-
-        // 2. Check `UniqueCustomers` (Global check)
-        let uniqueCustomer = await db("UniqueCustomers")
-            .where((builder) => {
-                if (email) builder.where({ customer_email: email });
-                builder.orWhere({ phone_number: phone_number });
-            })
-            .first();
 
         const trx = await db.transaction();
 
@@ -110,17 +107,10 @@ export class CustomerService {
                     })
                     .returning("*");
                 uniqueCustomer = createdUnique;
-                logger.info("Created new UniqueCustomer", {
-                    merchant_id,
-                    customer_uid: newUid,
-                    phone_number,
-                });
             } else {
                 logger.info("Linking to existing UniqueCustomer", {
                     merchant_id,
-                    customer_uid: uniqueCustomer.uid,
-                    phone_number,
-                    current_merchants_enrolled: uniqueCustomer.merchants_enrolled,
+                    customer_uid: uniqueCustomer.uid
                 });
                 // 3b. Update existing UniqueCustomer (increment enrolled count)
                 await trx("UniqueCustomers")
@@ -128,17 +118,12 @@ export class CustomerService {
                     .increment("merchants_enrolled", 1);
             }
 
-            // 4. Create `Customers` record
+            // 4. Create `Customers` record (ONLY merchant-specific fields)
             const [newCustomer] = await trx("Customers")
                 .insert({
                     merchant_id,
                     uid: uniqueCustomer.uid,
-                    customer_email: email || uniqueCustomer.customer_email,
-                    phone_number: phone_number,
-                    name: name || uniqueCustomer.name,
-                    first_name: first_name || uniqueCustomer.first_name,
-                    last_name: last_name || uniqueCustomer.last_name,
-                    date_of_birth: date_of_birth || uniqueCustomer.date_of_birth,
+                    // customer_email, phone_number, name, etc removed from here
                     status: "active",
                     source: "online",
                 })
@@ -146,11 +131,12 @@ export class CustomerService {
 
             await trx.commit();
 
-            // Fire webhook asynchronously (fire-and-forget)
-            // We use the newCustomer data which includes the generated ID and timestamps
-            webhookService.sendWebhook(merchant_id, "customer.created", newCustomer);
+            // Fire webhook asynchronously
+            // We combine data for the webhook payload
+            const webhookPayload = { ...newCustomer, ...uniqueCustomer };
+            webhookService.sendWebhook(merchant_id, "customer.created", webhookPayload);
 
-            return newCustomer;
+            return webhookPayload;
 
         } catch (error) {
             await trx.rollback();
@@ -167,7 +153,9 @@ export class CustomerService {
         logger.debug("Fetching customer", { merchant_id, customer_uid: uid });
 
         const customer = await db("Customers")
-            .where({ merchant_id, uid })
+            .join("UniqueCustomers", "Customers.uid", "UniqueCustomers.uid")
+            .where({ "Customers.merchant_id": merchant_id, "Customers.uid": uid })
+            .select("Customers.*", "UniqueCustomers.name", "UniqueCustomers.first_name", "UniqueCustomers.last_name", "UniqueCustomers.customer_email as email", "UniqueCustomers.phone_number", "UniqueCustomers.date_of_birth")
             .first();
 
         if (!customer) {
@@ -176,8 +164,6 @@ export class CustomerService {
         }
 
         logger.debug("Customer found", { merchant_id, customer_uid: uid });
-        // Optionally join with UniqueCustomers if more data is needed
-        // const details = await db("UniqueCustomers").where({ uid }).first();
 
         return customer;
     }
@@ -185,44 +171,49 @@ export class CustomerService {
     async updateCustomer(input: UpdateCustomerInput) {
         const { merchant_id, uid, existingCustomer, ...updateData } = input;
 
-        logger.info("Updating customer", { merchant_id, customer_uid: uid, has_existing: !!existingCustomer });
+        logger.info("Updating customer", { merchant_id, customer_uid: uid });
 
-        let customer = existingCustomer;
+        // Identify which fields belong to UniqueCustomers (global) and which to Customers (local)
+        // For now, names/emails/dob are global (UniqueCustomers).
+        const uniqueUpdates: any = {};
+        if (updateData.name !== undefined) uniqueUpdates.name = updateData.name;
+        if (updateData.first_name !== undefined) uniqueUpdates.first_name = updateData.first_name;
+        if (updateData.last_name !== undefined) uniqueUpdates.last_name = updateData.last_name;
+        if (updateData.date_of_birth !== undefined) uniqueUpdates.date_of_birth = updateData.date_of_birth;
+        if (updateData.phone_number !== undefined) uniqueUpdates.phone_number = updateData.phone_number;
+        if (updateData.email !== undefined) uniqueUpdates.customer_email = updateData.email;
 
-        if (!customer) {
-            customer = await db("Customers")
-                .where({ merchant_id, uid })
-                .first();
+        const trx = await db.transaction();
 
-            if (!customer) {
-                throw new AppError("Customer not found", 404, "customer_not_found");
+        try {
+            // Update UniqueCustomers if we have relevant fields
+            if (Object.keys(uniqueUpdates).length > 0) {
+                await trx("UniqueCustomers")
+                    .where({ uid })
+                    .update({
+                        ...uniqueUpdates,
+                        // updated_at? UniqueCustomers might not have updated_at or strict audit
+                    });
             }
+
+            // Update local Customers table (if we had any local fields - currently mostly status/points which aren't in this input usually)
+            // But we always update updated_at
+            const [updatedCustomer] = await trx("Customers")
+                .where({ merchant_id, uid })
+                .update({
+                    updated_at: new Date(),
+                })
+                .returning("*");
+
+            await trx.commit();
+
+            // Re-fetch full joined object for return
+            return await this.getCustomer(merchant_id, uid);
+
+        } catch (error) {
+            await trx.rollback();
+            throw error;
         }
-
-        // Update Customers table
-        const [updatedCustomer] = await db("Customers")
-            .where({ id: customer.id })
-            .update({
-                ...updateData,
-                updated_at: new Date(),
-            })
-            .returning("*");
-
-        logger.info("Customer updated successfully", {
-            merchant_id,
-            customer_uid: uid,
-            customer_id: updatedCustomer.id
-        });
-
-        // Fire webhook
-        webhookService.sendWebhook(merchant_id, "customer.updated", updatedCustomer);
-
-        // Ideally we should also consider if we update UniqueCustomers. 
-        // For now, let's keep them separate or sync critical fields if business logic requires.
-        // Syncing names/emails back to UniqueCustomers might be dangerous if other merchants rely on it.
-        // So we update only the local merchant view for now.
-
-        return updatedCustomer;
     }
 
     async listCustomers(filter: ListCustomersFilter) {
@@ -233,14 +224,22 @@ export class CustomerService {
 
         // Base query function to ensure clean state
         const getBaseQuery = () => {
-            const query = db("Customers").where({ merchant_id });
-            if (email) query.where("customer_email", "like", `%${email}%`);
-            if (phone_number) query.where("phone_number", "like", `%${phone_number}%`);
+            const query = db("Customers")
+                .join("UniqueCustomers", "Customers.uid", "UniqueCustomers.uid")
+                .where({ "Customers.merchant_id": merchant_id });
+
+            if (email) query.where("UniqueCustomers.customer_email", "like", `%${email}%`);
+            if (phone_number) query.where("UniqueCustomers.phone_number", "like", `%${phone_number}%`);
+
             return query;
         };
 
-        const countQuery = getBaseQuery().count<{ count: string }[]>("id as count").first();
-        const dataQuery = getBaseQuery().select("*").limit(limit).offset(offset).orderBy("created_at", "desc");
+        const countQuery = getBaseQuery().count<{ count: string }[]>("Customers.id as count").first();
+        const dataQuery = getBaseQuery()
+            .select("Customers.*", "UniqueCustomers.name", "UniqueCustomers.first_name", "UniqueCustomers.last_name", "UniqueCustomers.customer_email as email", "UniqueCustomers.phone_number", "UniqueCustomers.date_of_birth")
+            .limit(limit)
+            .offset(offset)
+            .orderBy("Customers.created_at", "desc");
 
         const [totalResult, customers] = await Promise.all([countQuery, dataQuery]);
 
