@@ -4,10 +4,6 @@ export interface MerchantResponse {
     full_name: string | null;
     phone_number: string | null;
     created_at: Date;
-    billing_email: string | null;
-    currency_code: string | null;
-    reply_to_email: string | null;
-    sender_name: string | null;
     facebook: string | null;
     ig_handle: string | null;
     linked_in: string | null;
@@ -39,10 +35,6 @@ export const toMerchantResponse = (merchant: any): MerchantResponse => {
         full_name: merchant.full_name || (merchant.first_name && merchant.last_name ? `${merchant.first_name} ${merchant.last_name}` : null),
         phone_number: merchant.phone_number || null,
         created_at: merchant.created_at,
-        billing_email: merchant.billing_email ?? null,
-        currency_code: merchant.currency_code ?? null,
-        reply_to_email: merchant.reply_to_email ?? null,
-        sender_name: merchant.sender_name ?? null,
         facebook: merchant.facebook || null,
         ig_handle: merchant.ig_handle || null,
         linked_in: merchant.linked_in || null,

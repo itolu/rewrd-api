@@ -8,10 +8,6 @@ describe("Merchant DTO Mapping", () => {
         full_name: "Balogun Silver",
         phone_number: "+2348085801335",
         created_at: new Date("2025-07-09T07:58:14.771Z"),
-        billing_email: null,
-        currency_code: null,
-        reply_to_email: null,
-        sender_name: null,
         facebook: null,
         ig_handle: "https://instagram.com/wefkh_ghjigkqfgkdddddddd",
         linked_in: null,
@@ -50,10 +46,6 @@ describe("Merchant DTO Mapping", () => {
             "full_name",
             "phone_number",
             "created_at",
-            "billing_email",
-            "currency_code",
-            "reply_to_email",
-            "sender_name",
             "facebook",
             "ig_handle",
             "linked_in",
@@ -78,7 +70,7 @@ describe("Merchant DTO Mapping", () => {
             "webhook_secret"
         ];
 
-        expect(keys.length).toBe(31);
+        expect(keys.length).toBe(27);
         expect(keys).toEqual(expectedOrder);
 
         expect(response).toEqual({
@@ -87,10 +79,6 @@ describe("Merchant DTO Mapping", () => {
             full_name: "Balogun Silver",
             phone_number: "+2348085801335",
             created_at: mockMerchant.created_at,
-            billing_email: null,
-            currency_code: null,
-            reply_to_email: null,
-            sender_name: null,
             facebook: null,
             ig_handle: "https://instagram.com/wefkh_ghjigkqfgkdddddddd",
             linked_in: null,

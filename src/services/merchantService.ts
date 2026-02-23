@@ -21,9 +21,6 @@ export class MerchantService {
         point_expiration_date?: number;
         last_chance_email_countdown?: number;
         reactivation_email_countdown?: number;
-        sender_name?: string;
-        reply_to_email?: string;
-        billing_email?: string;
         facebook?: string | null;
         ig_handle?: string | null;
         linked_in?: string | null;

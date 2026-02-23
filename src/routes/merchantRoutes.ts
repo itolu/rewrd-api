@@ -40,18 +40,6 @@ const router = Router();
  *         created_at:
  *           type: string
  *           format: date-time
- *         billing_email:
- *           type: string
- *           nullable: true
- *         currency_code:
- *           type: string
- *           nullable: true
- *         reply_to_email:
- *           type: string
- *           nullable: true
- *         sender_name:
- *           type: string
- *           nullable: true
  *         facebook:
  *           type: string
  *           nullable: true
@@ -220,12 +208,6 @@ const router = Router();
  *                 type: integer
  *               reactivation_email_countdown:
  *                 type: integer
- *               sender_name:
- *                 type: string
- *               reply_to_email:
- *                 type: string
- *               billing_email:
- *                 type: string
  *               facebook:
  *                 type: string
  *               ig_handle:
