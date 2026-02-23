@@ -25,7 +25,6 @@ export interface JoinedCustomer {
     customer_email?: string;
     email?: string; // Aliased in query
     phone_number: string;
-    name?: string | null;
     first_name?: string | null;
     last_name?: string | null;
     date_of_birth?: Date | null;

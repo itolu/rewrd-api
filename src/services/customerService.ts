@@ -98,11 +98,9 @@ export class CustomerService {
                         uid: newUid,
                         customer_email: email,
                         phone_number: phone_number,
-                        name: name || ((first_name && last_name) ? `${first_name} ${last_name}` : null),
                         first_name,
                         last_name,
                         date_of_birth,
-                        merchants_enrolled: 1,
                         overall_status: "active",
                     })
                     .returning("*");
@@ -112,10 +110,7 @@ export class CustomerService {
                     merchant_id,
                     customer_uid: uniqueCustomer.uid
                 });
-                // 3b. Update existing UniqueCustomer (increment enrolled count)
-                await trx("UniqueCustomers")
-                    .where({ uid: uniqueCustomer.uid })
-                    .increment("merchants_enrolled", 1);
+                // 3b. Existing UniqueCustomer - no update needed for merchants_enrolled as it's deprecated
             }
 
             // 4. Create `Customers` record (ONLY merchant-specific fields)
@@ -155,7 +150,7 @@ export class CustomerService {
         const customer = await db("Customers")
             .join("UniqueCustomers", "Customers.uid", "UniqueCustomers.uid")
             .where({ "Customers.merchant_id": merchant_id, "Customers.uid": uid })
-            .select("Customers.*", "UniqueCustomers.name", "UniqueCustomers.first_name", "UniqueCustomers.last_name", "UniqueCustomers.customer_email as email", "UniqueCustomers.phone_number", "UniqueCustomers.date_of_birth")
+            .select("Customers.*", "UniqueCustomers.first_name", "UniqueCustomers.last_name", "UniqueCustomers.customer_email as email", "UniqueCustomers.phone_number", "UniqueCustomers.date_of_birth")
             .first();
 
         if (!customer) {
@@ -176,7 +171,6 @@ export class CustomerService {
         // Identify which fields belong to UniqueCustomers (global) and which to Customers (local)
         // For now, names/emails/dob are global (UniqueCustomers).
         const uniqueUpdates: any = {};
-        if (updateData.name !== undefined) uniqueUpdates.name = updateData.name;
         if (updateData.first_name !== undefined) uniqueUpdates.first_name = updateData.first_name;
         if (updateData.last_name !== undefined) uniqueUpdates.last_name = updateData.last_name;
         if (updateData.date_of_birth !== undefined) uniqueUpdates.date_of_birth = updateData.date_of_birth;
@@ -236,7 +230,7 @@ export class CustomerService {
 
         const countQuery = getBaseQuery().count<{ count: string }[]>("Customers.id as count").first();
         const dataQuery = getBaseQuery()
-            .select("Customers.*", "UniqueCustomers.name", "UniqueCustomers.first_name", "UniqueCustomers.last_name", "UniqueCustomers.customer_email as email", "UniqueCustomers.phone_number", "UniqueCustomers.date_of_birth")
+            .select("Customers.*", "UniqueCustomers.first_name", "UniqueCustomers.last_name", "UniqueCustomers.customer_email as email", "UniqueCustomers.phone_number", "UniqueCustomers.date_of_birth")
             .limit(limit)
             .offset(offset)
             .orderBy("Customers.created_at", "desc");

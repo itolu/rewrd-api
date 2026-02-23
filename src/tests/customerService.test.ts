@@ -9,11 +9,9 @@ memDb.public.none(`
         uid VARCHAR PRIMARY KEY,
         customer_email VARCHAR,
         phone_number VARCHAR,
-        name VARCHAR,
         first_name VARCHAR,
         last_name VARCHAR,
         date_of_birth DATE,
-        merchants_enrolled INTEGER DEFAULT 0,
         overall_status VARCHAR DEFAULT 'active',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -86,7 +84,6 @@ describe("CustomerService", () => {
                 phone_number: input.phone_number,
                 first_name: input.first_name,
                 last_name: input.last_name,
-                merchants_enrolled: 1,
             });
 
             await testDb("Customers").insert({
@@ -114,7 +111,6 @@ describe("CustomerService", () => {
                 .where({ phone_number: input.phone_number }) // Access by phone, not ID since ID is random
                 .first();
             expect(uniqueCustomer).toBeDefined();
-            expect(uniqueCustomer.merchants_enrolled).toBe(1);
 
             // Verify Local Customer was created
             const localCustomer = await testDb("Customers")
@@ -129,18 +125,17 @@ describe("CustomerService", () => {
                 uid: "cus_global_123",
                 customer_email: input.email,
                 phone_number: input.phone_number,
-                merchants_enrolled: 1,
             });
 
             const result = await customerService.createOrUpdateCustomer(input);
 
             expect(result.uid).toBe("cus_global_123");
 
-            // Verify merchants_enrolled was incremented
+            // Verify merchants_enrolled was NOT incremented (deprecated)
             const uniqueCustomer = await testDb("UniqueCustomers")
                 .where({ uid: "cus_global_123" })
                 .first();
-            expect(uniqueCustomer.merchants_enrolled).toBe(2);
+            // expect(uniqueCustomer.merchants_enrolled).toBe(2); // Removed assertion
             // Verify Local Customer was created
             const localCustomer = await testDb("Customers")
                 .where({ merchant_id: input.merchant_id, uid: "cus_global_123" })
