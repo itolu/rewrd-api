@@ -1,7 +1,5 @@
-import { db } from "../config/db";
 import { logger } from "../utils/logger";
-import { AppError } from "../utils/AppError";
-import { webhookService } from "./webhookService";
+import { redisEventService } from "./redisEventService";
 
 export enum PointsLedgerType {
     CREDIT = "credit",
@@ -26,207 +24,113 @@ export interface PointsTransactionInput {
     metadata?: any;
 }
 
+/**
+ * Points Service
+ *
+ * Delegates points operations to the dashboard backend via Redis pub/sub.
+ * The dashboard backend holds the core business logic for:
+ *   - Merchant balance validation and deduction
+ *   - Customer balance updates
+ *   - Ledger entry creation
+ *
+ * Event types published:
+ *   - "points.credit"  → Credit points to a customer
+ *   - "points.redeem"  → Debit/redeem points from a customer
+ *   - "points.transactions.list" → Fetch transaction history
+ */
 export class PointsService {
     /**
-     * Credit points to a customer
+     * Credit points to a customer via the dashboard backend.
+     *
+     * Publishes a "points.credit" event and waits for the result.
+     * The dashboard backend is expected to:
+     *   1. Validate merchant has sufficient point balance
+     *   2. Deduct from merchant balance
+     *   3. Add to customer balance
+     *   4. Create a ledger entry
+     *   5. Return the ledger entry
      */
     async creditPoints(input: PointsTransactionInput) {
-        const { merchant_id, customer_uid, amount, transaction_type, reference_id, title, narration, order_id } = input;
+        const { merchant_id, customer_uid, amount, reference_id } = input;
 
-        logger.info("Crediting points", { merchant_id, customer_uid, amount, reference_id });
+        logger.info("Publishing points.credit event", { merchant_id, customer_uid, amount, reference_id });
 
-        return await db.transaction(async (trx) => {
-            // 1. Get merchant and lock row for update
-            const merchant = await trx("Merchants")
-                .where({ merchant_id })
-                .forUpdate()
-                .first();
-
-            if (!merchant) {
-                throw new AppError("Merchant not found", 404, "merchant_not_found");
-            }
-
-            const merchantBalance = Number(merchant.point_balance);
-            if (merchantBalance < amount) {
-                throw new AppError("Insufficient merchant point balance", 400, "insufficient_merchant_points");
-            }
-
-            // 2. Get customer and lock row for update
-            const customer = await trx("Customers")
-                .where({ merchant_id, uid: customer_uid })
-                .forUpdate()
-                .first();
-
-            if (!customer) {
-                throw new AppError("Customer not found", 404, "customer_not_found");
-            }
-
-            const pointsBefore = Number(customer.points_balance);
-            const pointsAfter = pointsBefore + amount;
-
-            // 3. Deduct from merchant balance
-            await trx("Merchants")
-                .where({ merchant_id })
-                .update({
-                    point_balance: merchantBalance - amount,
-                    updated_at: new Date()
-                });
-
-            // 4. Update customer balance
-            await trx("Customers")
-                .where({ id: customer.id })
-                .update({
-                    points_balance: pointsAfter,
-                    updated_at: new Date()
-                });
-
-            // 3. Create ledger entry
-            const [ledgerEntry] = await trx("Pointsledger")
-                .insert({
-                    merchant_id,
-                    member_uid: customer_uid,
-                    title,
-                    narration,
-                    ledger_type: PointsLedgerType.CREDIT,
-                    transaction_type,
-                    status: PointsTransactionStatus.SUCCESSFUL,
-                    reference_id,
-                    points: amount,
-                    points_balance_before: pointsBefore,
-                    points_balance_after: pointsAfter,
-                    order_id,
-                    processed: true,
-                    created_at: new Date(),
-                    updated_at: new Date()
-                })
-                .returning("*");
-
-            logger.info("Points credited successfully", {
-                merchant_id,
-                customer_uid,
-                balance_after: pointsAfter,
-                ledger_id: ledgerEntry.id
-            });
-
-            return ledgerEntry;
+        const ledgerEntry = await redisEventService.requestReply("points.credit", {
+            merchant_id,
+            customer_uid,
+            amount,
+            transaction_type: input.transaction_type,
+            reference_id,
+            title: input.title,
+            narration: input.narration,
+            order_id: input.order_id,
         });
+
+        logger.info("Points credited successfully via dashboard backend", {
+            merchant_id,
+            customer_uid,
+            ledger_id: ledgerEntry?.id,
+        });
+
+        return ledgerEntry;
     }
 
     /**
-     * Debit points from a customer
+     * Debit/redeem points from a customer via the dashboard backend.
+     *
+     * Publishes a "points.redeem" event and waits for the result.
+     * The dashboard backend is expected to:
+     *   1. Validate customer has sufficient points
+     *   2. Deduct from customer balance
+     *   3. Return points to merchant balance
+     *   4. Create a ledger entry
+     *   5. Return the ledger entry
      */
     async debitPoints(input: PointsTransactionInput) {
-        const { merchant_id, customer_uid, amount, transaction_type, reference_id, title, narration, order_id } = input;
+        const { merchant_id, customer_uid, amount, reference_id } = input;
 
-        logger.info("Debiting points", { merchant_id, customer_uid, amount, reference_id });
+        logger.info("Publishing points.redeem event", { merchant_id, customer_uid, amount, reference_id });
 
-        return await db.transaction(async (trx) => {
-            // 1. Get merchant and lock row for update
-            const merchant = await trx("Merchants")
-                .where({ merchant_id })
-                .forUpdate()
-                .first();
-
-            if (!merchant) {
-                throw new AppError("Merchant not found", 404, "merchant_not_found");
-            }
-
-            // 2. Get customer and lock row for update
-            const customer = await trx("Customers")
-                .where({ merchant_id, uid: customer_uid })
-                .forUpdate()
-                .first();
-
-            if (!customer) {
-                throw new AppError("Customer not found", 404, "customer_not_found");
-            }
-
-            const pointsBefore = Number(customer.points_balance);
-
-            if (pointsBefore < amount) {
-                throw new AppError("Insufficient points balance", 400, "insufficient_points");
-            }
-
-            const pointsAfter = pointsBefore - amount;
-
-            // 3. Return points to merchant balance
-            await trx("Merchants")
-                .where({ merchant_id })
-                .update({
-                    point_balance: Number(merchant.point_balance) + amount,
-                    updated_at: new Date()
-                });
-
-            // 4. Update customer balance
-            await trx("Customers")
-                .where({ id: customer.id })
-                .update({
-                    points_balance: pointsAfter,
-                    updated_at: new Date()
-                });
-
-            // 3. Create ledger entry
-            const [ledgerEntry] = await trx("Pointsledger")
-                .insert({
-                    merchant_id,
-                    member_uid: customer_uid,
-                    title,
-                    narration,
-                    ledger_type: PointsLedgerType.DEBIT,
-                    transaction_type,
-                    status: PointsTransactionStatus.SUCCESSFUL,
-                    reference_id,
-                    points: amount,
-                    points_balance_before: pointsBefore,
-                    points_balance_after: pointsAfter,
-                    order_id,
-                    processed: true,
-                    created_at: new Date(),
-                    updated_at: new Date()
-                })
-                .returning("*");
-
-            logger.info("Points debited successfully", {
-                merchant_id,
-                customer_uid,
-                balance_after: pointsAfter,
-                ledger_id: ledgerEntry.id
-            });
-
-            return ledgerEntry;
+        const ledgerEntry = await redisEventService.requestReply("points.redeem", {
+            merchant_id,
+            customer_uid,
+            amount,
+            transaction_type: input.transaction_type,
+            reference_id,
+            title: input.title,
+            narration: input.narration,
+            order_id: input.order_id,
+            metadata: input.metadata,
         });
+
+        logger.info("Points debited successfully via dashboard backend", {
+            merchant_id,
+            customer_uid,
+            ledger_id: ledgerEntry?.id,
+        });
+
+        return ledgerEntry;
     }
 
     /**
-     * Get transaction history for a customer
+     * Get transaction history for a customer via the dashboard backend.
+     *
+     * Publishes a "points.transactions.list" event and waits for the result.
+     * The dashboard backend returns { transactions, pagination }.
      */
     async getCustomerTransactions(merchant_id: string, customer_uid: string, page = 1, limit = 50) {
-        const offset = (page - 1) * limit;
+        logger.info("Publishing points.transactions.list event", { merchant_id, customer_uid, page, limit });
 
-        const [transactions, countResult] = await Promise.all([
-            db("Pointsledger")
-                .where({ merchant_id, member_uid: customer_uid })
-                .orderBy("created_at", "desc")
-                .limit(limit)
-                .offset(offset),
-            db("Pointsledger")
-                .where({ merchant_id, member_uid: customer_uid })
-                .count("id as count")
-                .first()
-        ]);
+        const result = await redisEventService.requestReply("points.transactions.list", {
+            merchant_id,
+            customer_uid,
+            page,
+            limit,
+        });
 
-        const total = Number(countResult?.count || 0);
-
-        return {
-            transactions,
-            pagination: {
-                page,
-                limit,
-                total,
-                total_pages: Math.ceil(total / limit)
-            }
-        };
+        return result;
     }
 }
 
 export const pointsService = new PointsService();
+

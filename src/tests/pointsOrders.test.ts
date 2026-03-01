@@ -4,6 +4,34 @@ import { db } from "../config/db";
 import { hashKey } from "../middleware/auth";
 import crypto from "crypto";
 
+// Mock the Redis event service so tests don't need a real Redis connection
+jest.mock("../services/redisEventService", () => {
+    const mockRequestReply = jest.fn();
+    const mockFireAndForget = jest.fn();
+    return {
+        redisEventService: {
+            initialize: jest.fn().mockResolvedValue(undefined),
+            requestReply: mockRequestReply,
+            fireAndForget: mockFireAndForget,
+            pendingCount: 0,
+            shutdown: jest.fn(),
+        },
+        RedisEventService: jest.fn(),
+    };
+});
+
+// Mock Redis config to prevent actual Redis connections
+jest.mock("../config/redis", () => ({
+    connectRedis: jest.fn().mockResolvedValue(false),
+    disconnectRedis: jest.fn().mockResolvedValue(undefined),
+    redisPublisher: { status: "wait", on: jest.fn(), connect: jest.fn(), quit: jest.fn() },
+    redisSubscriber: { status: "wait", on: jest.fn(), connect: jest.fn(), quit: jest.fn(), subscribe: jest.fn() },
+}));
+
+import { redisEventService } from "../services/redisEventService";
+
+const mockRequestReply = redisEventService.requestReply as jest.MockedFunction<typeof redisEventService.requestReply>;
+
 describe("Points Module", () => {
     let apiKey: string;
     let merchantId: string;
@@ -78,9 +106,25 @@ describe("Points Module", () => {
         await db("Merchants").where({ merchant_id: merchantId }).delete();
     });
 
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
     describe("POST /v1/points/credit", () => {
         it("should credit points to a customer", async () => {
             const idempotencyKey = `key_${crypto.randomUUID()}`;
+
+            // Mock the dashboard backend response
+            mockRequestReply.mockResolvedValueOnce({
+                id: 1,
+                merchant_id: merchantId,
+                member_uid: customerUid,
+                ledger_type: "credit",
+                points: 100,
+                points_balance_before: 0,
+                points_balance_after: 100,
+                status: "successful",
+            });
 
             const res = await request(app)
                 .post("/v1/points/credit")
@@ -97,17 +141,27 @@ describe("Points Module", () => {
             expect(res.body.data.ledger_type).toBe("credit");
             expect(Number(res.body.data.points)).toBe(100);
 
-            // Verify customer balance increased
-            const customer = await db("Customers").where({ uid: customerUid }).first();
-            expect(Number(customer.points_balance)).toBe(100);
-
-            // Verify merchant balance decreased
-            const merchant = await db("Merchants").where({ merchant_id: merchantId }).first();
-            expect(Number(merchant.point_balance)).toBe(99900);
+            // Verify the event was published with correct data
+            expect(mockRequestReply).toHaveBeenCalledWith("points.credit", expect.objectContaining({
+                merchant_id: merchantId,
+                customer_uid: customerUid,
+                amount: 100,
+            }));
         });
 
         it("should credit points with a rule_id and update rule stats", async () => {
             const idempotencyKey = `key_${crypto.randomUUID()}`;
+
+            // Mock the dashboard backend response
+            mockRequestReply.mockResolvedValueOnce({
+                id: 2,
+                merchant_id: merchantId,
+                member_uid: customerUid,
+                ledger_type: "credit",
+                points: 50,
+                title: "Test Fixed Rule",
+                status: "successful",
+            });
 
             const res = await request(app)
                 .post("/v1/points/credit")
@@ -141,7 +195,13 @@ describe("Points Module", () => {
             expect(res.body.error.code).toBe("rule_not_found");
         });
 
-        it("should fail if merchant has insufficient point balance", async () => {
+        it("should handle dashboard backend error (e.g. insufficient merchant points)", async () => {
+            // Simulate the dashboard backend returning an error
+            const { AppError } = require("../utils/AppError");
+            mockRequestReply.mockRejectedValueOnce(
+                new AppError("Insufficient merchant point balance", 400, "insufficient_merchant_points")
+            );
+
             const res = await request(app)
                 .post("/v1/points/credit")
                 .set("Authorization", `Bearer ${apiKey}`)
@@ -160,9 +220,17 @@ describe("Points Module", () => {
         it("should redeem points from a customer's balance", async () => {
             const idempotencyKey = `key_${crypto.randomUUID()}`;
 
-            // Get current balance
-            const customerBefore = await db("Customers").where({ uid: customerUid }).first();
-            const balanceBefore = Number(customerBefore.points_balance);
+            // Mock the dashboard backend response
+            mockRequestReply.mockResolvedValueOnce({
+                id: 3,
+                merchant_id: merchantId,
+                member_uid: customerUid,
+                ledger_type: "debit",
+                points: 50,
+                points_balance_before: 100,
+                points_balance_after: 50,
+                status: "successful",
+            });
 
             const res = await request(app)
                 .post("/v1/points/redeem")
@@ -179,12 +247,20 @@ describe("Points Module", () => {
             expect(res.body.data.ledger_type).toBe("debit");
             expect(Number(res.body.data.points)).toBe(50);
 
-            // Verify balance update
-            const customerAfter = await db("Customers").where({ uid: customerUid }).first();
-            expect(Number(customerAfter.points_balance)).toBe(balanceBefore - 50);
+            // Verify the event was published
+            expect(mockRequestReply).toHaveBeenCalledWith("points.redeem", expect.objectContaining({
+                merchant_id: merchantId,
+                customer_uid: customerUid,
+                amount: 50,
+            }));
         });
 
-        it("should fail if customer has insufficient points", async () => {
+        it("should handle dashboard backend error (e.g. insufficient points)", async () => {
+            const { AppError } = require("../utils/AppError");
+            mockRequestReply.mockRejectedValueOnce(
+                new AppError("Insufficient points balance", 400, "insufficient_points")
+            );
+
             const res = await request(app)
                 .post("/v1/points/redeem")
                 .set("Authorization", `Bearer ${apiKey}`)
@@ -202,6 +278,15 @@ describe("Points Module", () => {
 
     describe("GET /v1/points/customers/:uid/transactions", () => {
         it("should retrieve transaction history", async () => {
+            // Mock the dashboard backend response
+            mockRequestReply.mockResolvedValueOnce({
+                transactions: [
+                    { id: 1, ledger_type: "credit", points: 100 },
+                    { id: 2, ledger_type: "debit", points: 50 },
+                ],
+                pagination: { page: 1, limit: 50, total: 2, total_pages: 1 },
+            });
+
             const res = await request(app)
                 .get(`/v1/points/customers/${customerUid}/transactions`)
                 .set("Authorization", `Bearer ${apiKey}`);
@@ -210,6 +295,12 @@ describe("Points Module", () => {
             expect(res.body.status).toBe(true);
             expect(Array.isArray(res.body.data)).toBe(true);
             expect(res.body.pagination).toBeDefined();
+
+            // Verify the event was published
+            expect(mockRequestReply).toHaveBeenCalledWith("points.transactions.list", expect.objectContaining({
+                merchant_id: merchantId,
+                customer_uid: customerUid,
+            }));
         });
     });
 });

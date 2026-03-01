@@ -5,7 +5,12 @@ describe("Health Check", () => {
     it("should return 200 OK for GET /health", async () => {
         const res = await request(app).get("/health");
         expect(res.status).toBe(200);
-        expect(res.body).toEqual({ status: "ok", version: "1.0.0" });
+        expect(res.body).toEqual({
+            status: "ok",
+            version: "1.0.0",
+            redis: expect.any(String),
+            pendingEvents: expect.any(Number)
+        });
     });
 
     it("should return 404 for unknown routes", async () => {

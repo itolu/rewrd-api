@@ -37,7 +37,28 @@ jest.mock("../config/db", () => ({
     db: testDb,
 }));
 
-// NOW import CustomerService (it will use the mocked db)
+// Mock Redis config to prevent actual Redis connections
+jest.mock("../config/redis", () => ({
+    connectRedis: jest.fn().mockResolvedValue(false),
+    disconnectRedis: jest.fn().mockResolvedValue(undefined),
+    redisPublisher: { status: "wait", on: jest.fn(), connect: jest.fn(), quit: jest.fn() },
+    redisSubscriber: { status: "wait", on: jest.fn(), connect: jest.fn(), quit: jest.fn(), subscribe: jest.fn() },
+}));
+
+// Mock the Redis event service
+const mockRequestReply = jest.fn();
+jest.mock("../services/redisEventService", () => ({
+    redisEventService: {
+        initialize: jest.fn().mockResolvedValue(undefined),
+        requestReply: mockRequestReply,
+        fireAndForget: jest.fn(),
+        pendingCount: 0,
+        shutdown: jest.fn(),
+    },
+    RedisEventService: jest.fn(),
+}));
+
+// NOW import CustomerService (it will use the mocked db + mocked redis)
 import { CustomerService } from "../services/customerService";
 
 // Mock webhookService to prevent side effects and allow assertion
@@ -64,6 +85,7 @@ beforeEach(async () => {
     // Clean tables before each test
     await testDb("Customers").del();
     await testDb("UniqueCustomers").del();
+    jest.clearAllMocks();
 });
 
 describe("CustomerService", () => {
@@ -76,85 +98,59 @@ describe("CustomerService", () => {
     };
 
     describe("createOrUpdateCustomer", () => {
-        it("should return existing local customer (merged with unique data) if found", async () => {
-            // Seed data
-            await testDb("UniqueCustomers").insert({
-                uid: "cus_existing",
+        it("should publish customer.create event via Redis and return result", async () => {
+            const mockCustomerResult = {
+                uid: "cus_abc123",
+                merchant_id: input.merchant_id,
                 customer_email: input.email,
                 phone_number: input.phone_number,
                 first_name: input.first_name,
                 last_name: input.last_name,
-            });
+                status: "active",
+            };
 
-            await testDb("Customers").insert({
+            mockRequestReply.mockResolvedValueOnce(mockCustomerResult);
+
+            const result = await customerService.createOrUpdateCustomer(input);
+
+            expect(result).toEqual(mockCustomerResult);
+            expect(result.uid).toBe("cus_abc123");
+            expect(result.customer_email).toBe(input.email);
+
+            // Verify the correct event was published
+            expect(mockRequestReply).toHaveBeenCalledWith("customer.create", expect.objectContaining({
                 merchant_id: input.merchant_id,
+                email: input.email,
+                phone_number: input.phone_number,
+                first_name: input.first_name,
+                last_name: input.last_name,
+            }));
+        });
+
+        it("should return existing customer data when dashboard backend finds a match", async () => {
+            const existingCustomer = {
                 uid: "cus_existing",
-            });
+                merchant_id: input.merchant_id,
+                customer_email: input.email,
+                phone_number: input.phone_number,
+                first_name: input.first_name,
+                last_name: input.last_name,
+                status: "active",
+            };
+
+            mockRequestReply.mockResolvedValueOnce(existingCustomer);
 
             const result = await customerService.createOrUpdateCustomer(input);
 
             expect(result.uid).toBe("cus_existing");
-            expect(result.customer_email).toBe(input.email);
-            expect(result.first_name).toBe(input.first_name);
+            expect(mockRequestReply).toHaveBeenCalledTimes(1);
         });
 
-        it("should create new UniqueCustomer and Customer if neither exists", async () => {
-            const result = await customerService.createOrUpdateCustomer(input);
+        it("should propagate errors from dashboard backend", async () => {
+            mockRequestReply.mockRejectedValueOnce(new Error("Dashboard backend unavailable"));
 
-            expect(result).toBeDefined();
-            // Result is the combined object, so it should have the email
-            expect(result.customer_email).toBe(input.email);
-            expect(result.phone_number).toBe(input.phone_number);
-
-            // Verify UniqueCustomer was created
-            const uniqueCustomer = await testDb("UniqueCustomers")
-                .where({ phone_number: input.phone_number }) // Access by phone, not ID since ID is random
-                .first();
-            expect(uniqueCustomer).toBeDefined();
-
-            // Verify Local Customer was created
-            const localCustomer = await testDb("Customers")
-                .where({ merchant_id: input.merchant_id, uid: uniqueCustomer.uid })
-                .first();
-            expect(localCustomer).toBeDefined();
-        });
-
-        it("should link existing UniqueCustomer to new local Customer", async () => {
-            // Create existing UniqueCustomer
-            await testDb("UniqueCustomers").insert({
-                uid: "cus_global_123",
-                customer_email: input.email,
-                phone_number: input.phone_number,
-            });
-
-            const result = await customerService.createOrUpdateCustomer(input);
-
-            expect(result.uid).toBe("cus_global_123");
-
-            // Verify merchants_enrolled was NOT incremented (deprecated)
-            const uniqueCustomer = await testDb("UniqueCustomers")
-                .where({ uid: "cus_global_123" })
-                .first();
-            // expect(uniqueCustomer.merchants_enrolled).toBe(2); // Removed assertion
-            // Verify Local Customer was created
-            const localCustomer = await testDb("Customers")
-                .where({ merchant_id: input.merchant_id, uid: "cus_global_123" })
-                .first();
-            expect(localCustomer).toBeDefined();
-        });
-
-        it("should rollback transaction on error", async () => {
-            // This will cause an error due to missing required field (or just force throw in a mocked environment, but here we rely on constraints if any, or logic)
-            // Actually, in the code, `phone_number` and `email` are not NOT NULL in the schema defined above, but code might throw.
-            // Let's pass null for merchant_id to fail the insert into Customers (it is NOT NULL)
-            const invalidInput = { ...input, merchant_id: null as any };
-
-            await expect(customerService.createOrUpdateCustomer(invalidInput))
-                .rejects.toThrow();
-
-            // Verify no data was inserted
-            const customersCount = await testDb("Customers").count("* as count");
-            expect(parseInt(customersCount[0].count)).toBe(0);
+            await expect(customerService.createOrUpdateCustomer(input))
+                .rejects.toThrow("Dashboard backend unavailable");
         });
     });
 

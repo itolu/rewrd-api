@@ -3,6 +3,7 @@ import { db } from "../config/db";
 import { logger } from "../utils/logger";
 import { AppError } from "../utils/AppError";
 import { webhookService } from "./webhookService";
+import { redisEventService } from "./redisEventService";
 
 // Define input types for better type safety
 interface CreateCustomerInput {
@@ -37,111 +38,38 @@ interface ListCustomersFilter {
 
 export class CustomerService {
     /**
-     * Create or Update a customer.
-     * Logic:
-     * 1. Check if customer exists in `Customers` table for this merchant.
-     * 2. If not, check `UniqueCustomers` (global).
-     * 3. Link or create `UniqueCustomers` record.
-     * 4. Create `Customers` record linked to `UniqueCustomers`.
+     * Create or Update a customer via the dashboard backend.
+     *
+     * Publishes a "customer.create" event and waits for the result.
+     * The dashboard backend holds the core logic for:
+     *   - Checking/creating UniqueCustomers records
+     *   - Linking customers to merchants
+     *   - Handling duplicate detection
      */
     async createOrUpdateCustomer(input: CreateCustomerInput) {
-        const { merchant_id, email, phone_number, name, first_name, last_name, date_of_birth } = input;
+        const { merchant_id, email, phone_number, first_name, last_name, date_of_birth } = input;
 
-        logger.info("Creating or updating customer", {
+        logger.info("Publishing customer.create event", {
             merchant_id,
             phone_number,
             has_email: !!email,
         });
 
-        // 1. Check `UniqueCustomers` (Global check)
-        let uniqueCustomer = await db("UniqueCustomers")
-            .where((builder) => {
-                if (email) builder.where({ customer_email: email });
-                builder.orWhere({ phone_number: phone_number });
-            })
-            .first();
+        const customer = await redisEventService.requestReply("customer.create", {
+            merchant_id,
+            email,
+            phone_number,
+            first_name,
+            last_name,
+            date_of_birth,
+        });
 
-        // 2. If unique customer exists, check if they are already linked to this merchant
-        let existingLocalCustomer = null;
-        if (uniqueCustomer) {
-            existingLocalCustomer = await db("Customers")
-                .where({ merchant_id, uid: uniqueCustomer.uid })
-                .first();
-        }
+        logger.info("Customer created/updated via dashboard backend", {
+            merchant_id,
+            customer_uid: customer?.uid,
+        });
 
-        if (existingLocalCustomer) {
-            logger.info("Found existing local customer", {
-                merchant_id,
-                customer_uid: existingLocalCustomer.uid,
-                phone_number,
-            });
-
-            // Return combined data (local + unique)
-            return {
-                ...existingLocalCustomer,
-                ...uniqueCustomer // Spread unique details (name, email, etc.)
-            };
-        }
-
-        const trx = await db.transaction();
-
-        try {
-            if (!uniqueCustomer) {
-                logger.info("Creating new UniqueCustomer", {
-                    merchant_id,
-                    phone_number,
-                });
-                // 3a. Create new UniqueCustomer
-                const newUid = `cus_${crypto.randomBytes(8).toString('hex')}`;
-                const [createdUnique] = await trx("UniqueCustomers")
-                    .insert({
-                        uid: newUid,
-                        customer_email: email,
-                        phone_number: phone_number,
-                        first_name,
-                        last_name,
-                        date_of_birth,
-                        overall_status: "active",
-                    })
-                    .returning("*");
-                uniqueCustomer = createdUnique;
-            } else {
-                logger.info("Linking to existing UniqueCustomer", {
-                    merchant_id,
-                    customer_uid: uniqueCustomer.uid
-                });
-                // 3b. Existing UniqueCustomer - no update needed for merchants_enrolled as it's deprecated
-            }
-
-            // 4. Create `Customers` record (ONLY merchant-specific fields)
-            const [newCustomer] = await trx("Customers")
-                .insert({
-                    merchant_id,
-                    uid: uniqueCustomer.uid,
-                    // customer_email, phone_number, name, etc removed from here
-                    status: "active",
-                    source: "online",
-                })
-                .returning("*");
-
-            await trx.commit();
-
-            // Fire webhook asynchronously
-            // We combine data for the webhook payload
-            const webhookPayload = { ...newCustomer, ...uniqueCustomer };
-            webhookService.sendWebhook(merchant_id, "customer.created", webhookPayload);
-
-            return webhookPayload;
-
-        } catch (error) {
-            await trx.rollback();
-            logger.error("Error creating customer, transaction rolled back", {
-                merchant_id,
-                phone_number,
-                error: error instanceof Error ? error.message : String(error),
-            });
-            throw error;
-        }
+        return customer;
     }
 
     async getCustomer(merchant_id: string, uid: string) {

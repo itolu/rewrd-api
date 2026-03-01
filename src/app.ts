@@ -6,13 +6,25 @@ import { specs } from "./docs/swagger";
 import swaggerUi from "swagger-ui-express";
 import { AppError } from "./utils/AppError";
 import { verifyApiKey } from "./middleware/auth";
+import pointsRoutes from "./routes/pointsRoutes";
+import customerRoutes from "./routes/customerRoutes";
+import merchantRoutes from "./routes/merchantRoutes";
 import { httpLogger } from "./middleware/httpLogger";
 import { addRequestId } from "./middleware/requestId";
 import { apiLimiter } from "./middleware/rateLimiter";
 import { errorHandler } from "./middleware/errorHandler";
+import { connectRedis, redisPublisher } from "./config/redis";
+import { redisEventService } from "./services/redisEventService";
 import express, { Request, Response, NextFunction } from "express";
 
 const app = express();
+
+// Initialize Redis (non-blocking — failure is logged, not fatal)
+connectRedis().then(async (connected) => {
+    if (connected) {
+        await redisEventService.initialize();
+    }
+});
 
 // Trust proxy (required for correct IP rate limiting behind load balancers/proxies)
 app.set("trust proxy", 1);
@@ -28,7 +40,13 @@ app.use(express.urlencoded({ extended: true }));
 
 // Health Check
 app.get("/health", (req: Request, res: Response) => {
-    res.status(200).json({ status: "ok", version: "1.0.0" });
+    const redisStatus = redisPublisher.status === "ready" ? "connected" : "disconnected";
+    res.status(200).json({
+        status: "ok",
+        version: "1.0.0",
+        redis: redisStatus,
+        pendingEvents: redisEventService.pendingCount,
+    });
 });
 
 // Documentation (Development Only)
@@ -45,9 +63,9 @@ import customerRoutes from "./routes/customerRoutes";
 import merchantRoutes from "./routes/merchantRoutes";
 
 // API Routes
-// Mounting Customer Routes
-app.use("/v1/customers", verifyApiKey, customerRoutes);
+app.use("/v1/points", verifyApiKey, pointsRoutes);
 app.use("/v1/merchant", verifyApiKey, merchantRoutes);
+app.use("/v1/customers", verifyApiKey, customerRoutes);
 
 // 404 Handler
 app.use((req: Request, res: Response, next: NextFunction) => {
