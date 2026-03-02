@@ -1,0 +1,1914 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Rewrd API",
+    "version": "1.0.0",
+    "description": "## Introduction\n\nThe Rewrd API is a RESTful API that powers the **Rewrd Loyalty Platform**. It provides programmatic access to manage customers, loyalty points, earning rules, and merchant configurations.\n\n## Authentication\n\nAll API requests require a **Bearer token** (your API key) in the `Authorization` header:\n\n```\nAuthorization: Bearer sk_test_your_api_key_here\n```\n\nAPI keys are scoped to your merchant account. Use `sk_test_` prefixed keys for development and `sk_live_` prefixed keys for production.\n\n## Idempotency\n\nMutation endpoints (`POST`) require an `Idempotency-Key` header to prevent duplicate operations. The key must be alphanumeric with hyphens or underscores, 1–100 characters:\n\n```\nIdempotency-Key: credit-cust123-20260225-001\n```\n\nReplaying a request with the same Idempotency-Key returns the cached response from the original request.\n\n## Rate Limiting\n\nAPI requests are rate-limited per IP address. If you exceed the limit, you'll receive a `429 Too Many Requests` response. Include appropriate retry logic with exponential backoff.\n\n## Error Handling\n\nAll errors follow a consistent format:\n\n```json\n{\n  \"status\": false,\n  \"message\": \"Human-readable error message\",\n  \"error\": {\n    \"code\": \"machine_readable_error_code\",\n    \"request_id\": \"unique-request-id\",\n    \"description\": \"Detailed error description\"\n  }\n}\n```\n\nCommon error codes include `validation_error`, `unauthorized`, `not_found`, `insufficient_points`, and `internal_error`.",
+    "contact": {
+      "name": "Rewrd Engineering",
+      "url": "https://getrewrd.com"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://rewrd-api-staging.fly.dev/v1",
+      "description": "Development Server"
+    },
+    {
+      "url": "http://localhost:3004/v1",
+      "description": "Local Server"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Customers",
+      "description": "Manage your loyalty program customers. Create, update, list, and control the status of customers enrolled in your points program."
+    },
+    {
+      "name": "Points",
+      "description": "Credit and redeem loyalty points for customers. View transaction history and manage the points lifecycle."
+    },
+    {
+      "name": "Merchant",
+      "description": "View and update your merchant configuration, earning rules, IP security settings, and analytics dashboard."
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Enter your API Key (e.g. sk_test_...)"
+      }
+    },
+    "schemas": {
+      "ErrorResponse": {
+        "type": "object",
+        "description": "Standard error response returned by all endpoints on failure.",
+        "properties": {
+          "status": {
+            "type": "boolean",
+            "example": false,
+            "description": "Always `false` for error responses."
+          },
+          "message": {
+            "type": "string",
+            "example": "Customer not found",
+            "description": "Human-readable error message."
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "example": "not_found",
+                "description": "Machine-readable error code for programmatic handling."
+              },
+              "request_id": {
+                "type": "string",
+                "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+                "description": "Unique identifier for this request, useful for support inquiries."
+              },
+              "description": {
+                "type": "string",
+                "example": "Customer not found",
+                "description": "Detailed description of the error."
+              }
+            }
+          }
+        }
+      },
+      "Pagination": {
+        "type": "object",
+        "description": "Pagination metadata included in list responses.",
+        "properties": {
+          "page": {
+            "type": "integer",
+            "example": 1,
+            "description": "Current page number."
+          },
+          "limit": {
+            "type": "integer",
+            "example": 50,
+            "description": "Number of items per page."
+          },
+          "total": {
+            "type": "integer",
+            "example": 150,
+            "description": "Total number of items across all pages."
+          },
+          "total_pages": {
+            "type": "integer",
+            "example": 3,
+            "description": "Total number of pages."
+          }
+        }
+      },
+      "Customer": {
+        "type": "object",
+        "description": "Represents a customer enrolled in your loyalty program.",
+        "properties": {
+          "uid": {
+            "type": "string",
+            "description": "Unique identifier for the customer, generated by Rewrd.",
+            "example": "cust_abc123def456"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "nullable": true,
+            "description": "Customer's email address. Used for notifications if configured.",
+            "example": "jane@example.com"
+          },
+          "phone_number": {
+            "type": "string",
+            "description": "Customer's phone number. This is the primary identifier used for matching.",
+            "example": "+2348012345678"
+          },
+          "first_name": {
+            "type": "string",
+            "nullable": true,
+            "description": "Customer's first name.",
+            "example": "Jane"
+          },
+          "last_name": {
+            "type": "string",
+            "nullable": true,
+            "description": "Customer's last name.",
+            "example": "Doe"
+          },
+          "date_of_birth": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "description": "Customer's date of birth in ISO 8601 format.",
+            "example": "1995-06-15"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "inactive",
+              "restricted"
+            ],
+            "description": "Current status of the customer. `active`: can earn and redeem points. `restricted`: blocked from all point operations.",
+            "example": "active"
+          },
+          "points_balance": {
+            "type": "number",
+            "description": "Current available points balance for this customer.",
+            "example": 1500
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when the customer was first created.",
+            "example": "2026-01-15T10:30:00.000Z"
+          }
+        }
+      },
+      "MerchantConfig": {
+        "type": "object",
+        "description": "Your merchant account configuration including profile, social links, point expiry settings, and security options.",
+        "properties": {
+          "merchant_id": {
+            "type": "string",
+            "description": "Your unique merchant identifier.",
+            "example": "merch_xyz789"
+          },
+          "email": {
+            "type": "string",
+            "nullable": true,
+            "description": "Primary email address associated with the merchant account.",
+            "example": "admin@mybusiness.com"
+          },
+          "full_name": {
+            "type": "string",
+            "nullable": true,
+            "description": "Full business or merchant name.",
+            "example": "My Coffee Shop"
+          },
+          "phone_number": {
+            "type": "string",
+            "nullable": true,
+            "description": "Merchant contact phone number.",
+            "example": "+2348099887766"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when the merchant account was created.",
+            "example": "2025-12-01T08:00:00.000Z"
+          },
+          "facebook": {
+            "type": "string",
+            "nullable": true,
+            "description": "Facebook profile or page URL.",
+            "example": "https://facebook.com/mycoffeeshop"
+          },
+          "ig_handle": {
+            "type": "string",
+            "nullable": true,
+            "description": "Instagram handle.",
+            "example": "@mycoffeeshop"
+          },
+          "linked_in": {
+            "type": "string",
+            "nullable": true,
+            "description": "LinkedIn profile URL."
+          },
+          "telegram": {
+            "type": "string",
+            "nullable": true,
+            "description": "Telegram handle or group link."
+          },
+          "tiktok": {
+            "type": "string",
+            "nullable": true,
+            "description": "TikTok handle."
+          },
+          "whatsapp": {
+            "type": "string",
+            "nullable": true,
+            "description": "WhatsApp phone number or link."
+          },
+          "x_handle": {
+            "type": "string",
+            "nullable": true,
+            "description": "X (formerly Twitter) handle."
+          },
+          "youtube": {
+            "type": "string",
+            "nullable": true,
+            "description": "YouTube channel URL."
+          },
+          "snapchat": {
+            "type": "string",
+            "nullable": true,
+            "description": "Snapchat handle."
+          },
+          "point_balance": {
+            "type": "number",
+            "description": "Your current merchant point pool balance. This is debited when customers earn points and credited when customers redeem points.",
+            "example": 50000
+          },
+          "last_chance_email_countdown": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Number of days before point expiry to send a last-chance notification email to the customer.",
+            "example": 7
+          },
+          "minimum_threshold_amount": {
+            "type": "number",
+            "description": "Minimum point balance a customer must have to be eligible for redemption.",
+            "example": 100
+          },
+          "point_should_expire": {
+            "type": "boolean",
+            "description": "Whether customer points expire after a set period.",
+            "example": true
+          },
+          "reactivation_email_countdown": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Number of days of customer inactivity before sending a re-engagement email.",
+            "example": 30
+          },
+          "point_expiration_date": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Number of days after which customer points expire (only if `point_should_expire` is true).",
+            "example": 365
+          },
+          "minimum_threshold_updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Timestamp of the last update to the minimum threshold amount."
+          },
+          "first_name": {
+            "type": "string",
+            "nullable": true,
+            "description": "Merchant owner's first name.",
+            "example": "Tolu"
+          },
+          "last_name": {
+            "type": "string",
+            "nullable": true,
+            "description": "Merchant owner's last name.",
+            "example": "Adeyemi"
+          },
+          "status": {
+            "type": "string",
+            "description": "Current status of the merchant account.",
+            "example": "active"
+          },
+          "ip_whitelist": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "List of IP addresses allowed to access the API. An empty list means no IP restriction.",
+            "example": [
+              "203.0.113.50",
+              "198.51.100.25"
+            ]
+          },
+          "webhook_url": {
+            "type": "string",
+            "nullable": true,
+            "description": "URL where Rewrd sends webhook notifications for events like `points.earned` and `points.redeemed`.",
+            "example": "https://mybusiness.com/webhooks/rewrd"
+          },
+          "webhook_secret": {
+            "type": "string",
+            "nullable": true,
+            "description": "Secret used to sign webhook payloads so you can verify their authenticity.",
+            "example": "whsec_abc123..."
+          }
+        }
+      },
+      "EarningRule": {
+        "type": "object",
+        "description": "An earning rule defines how customers earn points. Rules are configured in the Rewrd dashboard and referenced by ID when crediting points.",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Unique identifier for the earning rule.",
+            "example": 42
+          },
+          "merchant_id": {
+            "type": "string",
+            "description": "The merchant this rule belongs to.",
+            "example": "merch_xyz789"
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable name for the earning rule (e.g. \"Purchase Reward\", \"Signup Bonus\").",
+            "example": "Purchase Reward"
+          },
+          "points": {
+            "type": "number",
+            "description": "Number of points awarded when this rule is applied.",
+            "example": 50
+          },
+          "type": {
+            "type": "string",
+            "description": "Category of the earning rule.",
+            "example": "purchase"
+          },
+          "subtype": {
+            "type": "string",
+            "nullable": true,
+            "description": "Sub-category for more granular rule classification."
+          },
+          "status": {
+            "type": "string",
+            "description": "Whether this rule is currently `active` or `inactive`.",
+            "example": "active"
+          },
+          "users_rewarded": {
+            "type": "integer",
+            "description": "Total number of times this rule has been used to award points.",
+            "example": 1523
+          },
+          "deleted": {
+            "type": "boolean",
+            "description": "Whether this rule has been soft-deleted.",
+            "example": false
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when the rule was created.",
+            "example": "2026-01-01T00:00:00.000Z"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp of the last update to this rule."
+          },
+          "earning_type": {
+            "type": "string",
+            "nullable": true,
+            "description": "Whether points are awarded as a `fixed` amount or `percentage_off` of a purchase.",
+            "example": "fixed"
+          },
+          "percentage_off": {
+            "type": "number",
+            "nullable": true,
+            "description": "Percentage value used when `earning_type` is `percentage_off`.",
+            "example": 10
+          }
+        }
+      },
+      "AnalyticsSummary": {
+        "type": "object",
+        "description": "Aggregated analytics for your loyalty program over a specified time period.",
+        "properties": {
+          "period": {
+            "type": "string",
+            "description": "The time period this data covers.",
+            "example": "30d"
+          },
+          "total_earned": {
+            "type": "number",
+            "description": "Total points earned by all customers in this period.",
+            "example": 25000
+          },
+          "total_redeemed": {
+            "type": "number",
+            "description": "Total points redeemed by all customers in this period.",
+            "example": 8500
+          },
+          "active_customers": {
+            "type": "integer",
+            "description": "Number of customers who had at least one transaction in this period.",
+            "example": 142
+          },
+          "total_points_balance": {
+            "type": "number",
+            "description": "Combined points balance across all customers.",
+            "example": 175000
+          },
+          "total_transactions": {
+            "type": "integer",
+            "description": "Total number of point transactions (credits + redemptions) in this period.",
+            "example": 854
+          }
+        }
+      },
+      "PointsTransaction": {
+        "type": "object",
+        "description": "A ledger entry representing a points credit or redemption. Every point operation creates a transaction record.",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Unique identifier for this transaction.",
+            "example": 1284
+          },
+          "merchant_id": {
+            "type": "string",
+            "description": "The merchant account this transaction belongs to.",
+            "example": "merch_xyz789"
+          },
+          "customer_uid": {
+            "type": "string",
+            "description": "The customer who earned or redeemed points.",
+            "example": "cust_abc123def456"
+          },
+          "amount": {
+            "type": "number",
+            "description": "Number of points in this transaction. Positive for credits, negative for redemptions.",
+            "example": 50
+          },
+          "transaction_type": {
+            "type": "string",
+            "description": "Type of transaction:\n- `member_points_adjustment_credit` — direct point credit\n- `member_purchase_order_earned_fixed` — points earned via a fixed earning rule\n- `member_purchase_order_earned_percentage` — points earned via a percentage earning rule\n- `member_purchase_order_redeemed` — points redeemed\n",
+            "example": "member_points_adjustment_credit"
+          },
+          "reference_id": {
+            "type": "string",
+            "description": "Unique reference ID for this transaction, used for deduplication.",
+            "example": "credit_a1b2c3d4-e5f6-7890"
+          },
+          "title": {
+            "type": "string",
+            "description": "Human-readable title for this transaction.",
+            "example": "Points Credit"
+          },
+          "narration": {
+            "type": "string",
+            "description": "Optional description or note for this transaction.",
+            "example": "Credited 50 points for purchase #12345"
+          },
+          "balance_after": {
+            "type": "number",
+            "description": "Customer's points balance after this transaction was applied.",
+            "example": 1550
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when this transaction was created.",
+            "example": "2026-02-20T14:30:00.000Z"
+          }
+        }
+      }
+    }
+  },
+  "security": [
+    {
+      "BearerAuth": []
+    }
+  ],
+  "paths": {
+    "/customers": {
+      "post": {
+        "summary": "Create or Update a Customer",
+        "operationId": "createOrUpdateCustomer",
+        "description": "Creates a new customer or updates an existing one (upsert). The customer is matched by `phone_number` within your merchant account.\n\n**Upsert behavior:**\n- If no customer with the given `phone_number` exists, a new customer is created with status `active` and 0 points balance.\n- If a customer already exists with that `phone_number`, the provided fields are updated (only non-null fields are overwritten).\n\nThis endpoint requires an `Idempotency-Key` header to prevent duplicate customer creation from retried requests.\n",
+        "tags": [
+          "Customers"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{1,100}$"
+            },
+            "description": "Unique key for idempotent request handling. Must be alphanumeric with hyphens or underscores, 1–100 characters.",
+            "example": "customer-create-20260203-001"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "phone_number"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "description": "Customer's email address.",
+                    "example": "jane@example.com"
+                  },
+                  "phone_number": {
+                    "type": "string",
+                    "description": "Customer's phone number. Used as the unique identifier for matching.",
+                    "example": "+2348012345678"
+                  },
+                  "first_name": {
+                    "type": "string",
+                    "description": "Customer's first name.",
+                    "example": "Jane"
+                  },
+                  "last_name": {
+                    "type": "string",
+                    "description": "Customer's last name.",
+                    "example": "Doe"
+                  },
+                  "date_of_birth": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Customer's date of birth in ISO 8601 format.",
+                    "example": "1995-06-15T00:00:00.000Z"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Customer created or updated successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Customer created successfully"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Customer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error — missing required fields or invalid `Idempotency-Key`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "List Customers",
+        "operationId": "listCustomers",
+        "description": "Retrieves a paginated list of all customers belonging to your merchant account.\n\nYou can filter results by `email` or `phone_number` to quickly find specific customers. Results are sorted by creation date (newest first).\n",
+        "tags": [
+          "Customers"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            },
+            "description": "Page number for pagination (1-indexed).",
+            "example": 1
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 50
+            },
+            "description": "Number of customers to return per page (max 100).",
+            "example": 20
+          },
+          {
+            "in": "query",
+            "name": "email",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter customers by exact email address match.",
+            "example": "jane@example.com"
+          },
+          {
+            "in": "query",
+            "name": "phone_number",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter customers by exact phone number match.",
+            "example": "+2348012345678"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of customers retrieved successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Customers retrieved successfully"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Customer"
+                      }
+                    },
+                    "pagination": {
+                      "$ref": "#/components/schemas/Pagination"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/customers/{uid}": {
+      "get": {
+        "summary": "Get a Customer",
+        "operationId": "getCustomer",
+        "description": "Retrieves the full details of a single customer by their unique identifier (`uid`).\n\nUse this endpoint to check a customer's current points balance, status, and profile information before performing point operations.\n",
+        "tags": [
+          "Customers"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "uid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The unique identifier of the customer.",
+            "example": "cust_abc123def456"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer details retrieved successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Customer fetched successfully"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Customer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Customer not found — no customer exists with the given UID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Update a Customer",
+        "operationId": "updateCustomer",
+        "description": "Updates the profile information of an existing customer. Only the fields provided in the request body are updated; omitted fields are left unchanged.\n\n**Note:** The customer must have an `active` status to be updated. Restricted customers must be unrestricted first.\n",
+        "tags": [
+          "Customers"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "uid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The unique identifier of the customer to update.",
+            "example": "cust_abc123def456"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "description": "Updated email address.",
+                    "example": "jane.new@example.com"
+                  },
+                  "phone_number": {
+                    "type": "string",
+                    "description": "Updated phone number.",
+                    "example": "+2349087654321"
+                  },
+                  "first_name": {
+                    "type": "string",
+                    "description": "Updated first name.",
+                    "example": "Janet"
+                  },
+                  "last_name": {
+                    "type": "string",
+                    "description": "Updated last name.",
+                    "example": "Smith"
+                  },
+                  "date_of_birth": {
+                    "type": "string",
+                    "description": "Updated date of birth in ISO 8601 format.",
+                    "example": "1995-06-15"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Customer updated successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Customer updated successfully"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Customer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Customer is not active — restricted customers cannot be updated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Customer not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/customers/{uid}/restrict": {
+      "patch": {
+        "summary": "Restrict a Customer",
+        "operationId": "restrictCustomer",
+        "description": "Restricts a customer, preventing them from earning or redeeming points. The customer's existing points balance is preserved but frozen.\n\nUse this for fraud prevention or when a customer account needs to be temporarily suspended. Only `active` customers can be restricted.\n",
+        "tags": [
+          "Customers"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "uid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The unique identifier of the customer to restrict.",
+            "example": "cust_abc123def456"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer restricted successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Customer restricted successfully"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Customer is not active — cannot restrict an already restricted or inactive customer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Customer not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/customers/{uid}/unrestrict": {
+      "patch": {
+        "summary": "Unrestrict a Customer",
+        "operationId": "unrestrictCustomer",
+        "description": "Removes the restriction on a customer, restoring their ability to earn and redeem points. Their previously frozen points balance becomes available again.\n",
+        "tags": [
+          "Customers"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "uid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The unique identifier of the customer to unrestrict.",
+            "example": "cust_abc123def456"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer unrestricted successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Customer unrestricted successfully"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Customer not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/merchant/config": {
+      "get": {
+        "summary": "Get Merchant Configuration",
+        "operationId": "getMerchantConfig",
+        "description": "Retrieves your current merchant configuration including profile information, social links, point expiry settings, webhook configuration, and security settings.\n\nUse this endpoint to read your current settings before making updates.\n",
+        "tags": [
+          "Merchant"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Merchant configuration retrieved successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Merchant configuration retrieved successfully"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/MerchantConfig"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update Merchant Configuration",
+        "operationId": "updateMerchantConfig",
+        "description": "Updates your merchant configuration. Only the fields included in the request body are updated; omitted fields remain unchanged.\n\nCommon use cases include updating the minimum redemption threshold, enabling point expiration, or updating social media links.\n",
+        "tags": [
+          "Merchant"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "minimum_threshold_amount": {
+                    "type": "number",
+                    "description": "Minimum point balance required for redemption.",
+                    "example": 100
+                  },
+                  "point_should_expire": {
+                    "type": "boolean",
+                    "description": "Enable or disable point expiration.",
+                    "example": true
+                  },
+                  "point_expiration_date": {
+                    "type": "integer",
+                    "description": "Number of days until points expire (only relevant if `point_should_expire` is true).",
+                    "example": 365
+                  },
+                  "last_chance_email_countdown": {
+                    "type": "integer",
+                    "description": "Days before expiry to send a last-chance email.",
+                    "example": 7
+                  },
+                  "reactivation_email_countdown": {
+                    "type": "integer",
+                    "description": "Days of inactivity before sending a re-engagement email.",
+                    "example": 30
+                  },
+                  "facebook": {
+                    "type": "string",
+                    "description": "Facebook profile or page URL."
+                  },
+                  "ig_handle": {
+                    "type": "string",
+                    "description": "Instagram handle."
+                  },
+                  "linked_in": {
+                    "type": "string",
+                    "description": "LinkedIn profile URL."
+                  },
+                  "telegram": {
+                    "type": "string",
+                    "description": "Telegram handle or group link."
+                  },
+                  "tiktok": {
+                    "type": "string",
+                    "description": "TikTok handle."
+                  },
+                  "whatsapp": {
+                    "type": "string",
+                    "description": "WhatsApp phone number or link."
+                  },
+                  "x_handle": {
+                    "type": "string",
+                    "description": "X (formerly Twitter) handle."
+                  },
+                  "youtube": {
+                    "type": "string",
+                    "description": "YouTube channel URL."
+                  },
+                  "snapchat": {
+                    "type": "string",
+                    "description": "Snapchat handle."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Configuration updated successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Merchant configuration updated successfully"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/MerchantConfig"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error — invalid field values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/merchant/rules": {
+      "get": {
+        "summary": "List Earning Rules",
+        "operationId": "listEarningRules",
+        "description": "Retrieves all active (non-deleted) earning rules for your merchant account.\n\nEarning rules define how customers earn points. Each rule has a name, point value, and type. Use the rule `id` when crediting points via the [`POST /points/credit`](#/Points/creditPoints) endpoint to automatically associate the credit with the rule.\n",
+        "tags": [
+          "Merchant"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Earning rules retrieved successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Earning rules retrieved successfully"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/EarningRule"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/merchant/rules/{id}": {
+      "get": {
+        "summary": "Get Earning Rule Details",
+        "operationId": "getEarningRule",
+        "description": "Retrieves the details of a single earning rule by its ID, including usage statistics (`users_rewarded` count).\n",
+        "tags": [
+          "Merchant"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "The unique ID of the earning rule.",
+            "example": 42
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Earning rule details retrieved successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Earning rule retrieved successfully"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/EarningRule"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Earning rule not found — no active rule exists with the given ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/merchant/security/ip-whitelist": {
+      "get": {
+        "summary": "Get IP Whitelist",
+        "operationId": "getIpWhitelist",
+        "description": "Retrieves the list of IP addresses that are currently whitelisted for API access.\n\nWhen IP whitelisting is active (the list is non-empty), only requests originating from these IPs will be accepted. An empty list means all IPs are allowed.\n",
+        "tags": [
+          "Merchant"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "IP whitelist retrieved successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "description": "List of whitelisted IP addresses.",
+                      "items": {
+                        "type": "string"
+                      },
+                      "example": [
+                        "203.0.113.50",
+                        "198.51.100.25"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Update IP Whitelist",
+        "operationId": "updateIpWhitelist",
+        "description": "Replaces the entire IP whitelist with the provided list of IP addresses.\n\n**Warning:** Setting an incorrect whitelist can lock you out of your API. Send an empty array `[]` to disable IP whitelisting and allow all IPs.\n",
+        "tags": [
+          "Merchant"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "ips"
+                ],
+                "properties": {
+                  "ips": {
+                    "type": "array",
+                    "description": "List of IP addresses to whitelist. Send an empty array to disable IP whitelisting.",
+                    "items": {
+                      "type": "string"
+                    },
+                    "example": [
+                      "203.0.113.50",
+                      "198.51.100.25"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "IP whitelist updated successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "IP whitelist updated successfully"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "example": [
+                        "203.0.113.50",
+                        "198.51.100.25"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error — invalid IP addresses provided.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/merchant/analytics": {
+      "get": {
+        "summary": "Get Merchant Analytics",
+        "operationId": "getMerchantAnalytics",
+        "description": "Retrieves aggregated analytics for your loyalty program, filtered by time period.\n\nThe summary includes total points earned and redeemed, number of active customers, combined points balance, and total transaction count for the specified period.\n",
+        "tags": [
+          "Merchant"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "period",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "today",
+                "7d",
+                "30d",
+                "all"
+              ],
+              "default": "all"
+            },
+            "description": "Time period to aggregate analytics for:\n- `today` — current day only\n- `7d` — last 7 days\n- `30d` — last 30 days\n- `all` — all time (default)\n",
+            "example": "30d"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Analytics retrieved successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Analytics retrieved successfully"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/AnalyticsSummary"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/points/credit": {
+      "post": {
+        "summary": "Credit Points to a Customer",
+        "operationId": "creditPoints",
+        "description": "Awards loyalty points to a customer's account. The specified number of points is added to the customer's balance and deducted from your merchant point pool.\n\n**Earning Rule Association (optional):**\nYou can associate the credit with an earning rule by providing a `rule_id`. This links the transaction to the rule for analytics and automatically uses the rule's name and type in the transaction record. The rule must be `active` and not deleted.\n\n**Webhooks:**\nA `points.earned` webhook event is fired after a successful credit, containing the `customer_uid`, `points`, `rule_id`, and `ledger_id`.\n\nThis endpoint requires an `Idempotency-Key` header to prevent duplicate credits.\n",
+        "tags": [
+          "Points"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{1,100}$"
+            },
+            "description": "Unique key for idempotent request handling. Must be alphanumeric with hyphens or underscores, 1–100 characters.",
+            "example": "credit-cust123-20260225-001"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "customer_uid",
+                  "points"
+                ],
+                "properties": {
+                  "customer_uid": {
+                    "type": "string",
+                    "description": "The UID of the customer to credit points to.",
+                    "example": "cust_abc123def456"
+                  },
+                  "points": {
+                    "type": "integer",
+                    "description": "Number of points to credit. Must be a positive integer.",
+                    "example": 50
+                  },
+                  "rule_id": {
+                    "type": "integer",
+                    "description": "Optional ID of an earning rule to associate with this credit. The rule must be active.",
+                    "example": 42
+                  },
+                  "narration": {
+                    "type": "string",
+                    "description": "Optional note or description for this transaction.",
+                    "example": "Reward for purchase #12345"
+                  },
+                  "order_id": {
+                    "type": "string",
+                    "description": "Optional external order ID to link this credit to a specific purchase.",
+                    "example": "order_98765"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Points credited successfully. Returns the created ledger entry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Points credited successfully"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/PointsTransaction"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error — missing required fields or invalid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Customer or earning rule not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/points/redeem": {
+      "post": {
+        "summary": "Redeem Points",
+        "operationId": "redeemPoints",
+        "description": "Deducts loyalty points from a customer's account for a redemption. The specified number of points is subtracted from the customer's balance and added back to your merchant point pool.\n\n**Balance checks:**\n- The customer must have sufficient points balance to cover the redemption.\n- The customer must meet the configured minimum threshold amount for redemption.\n- The customer must be in `active` status (not restricted).\n\n**Webhooks:**\nA `points.redeemed` webhook event is fired after a successful redemption, containing the `customer_uid`, `points`, `reward_id`, and `ledger_id`.\n\nThis endpoint requires an `Idempotency-Key` header to prevent duplicate redemptions.\n",
+        "tags": [
+          "Points"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{1,100}$"
+            },
+            "description": "Unique key for idempotent request handling. Must be alphanumeric with hyphens or underscores, 1–100 characters.",
+            "example": "redeem-cust123-20260225-001"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "customer_uid",
+                  "points"
+                ],
+                "properties": {
+                  "customer_uid": {
+                    "type": "string",
+                    "description": "The UID of the customer to redeem points from.",
+                    "example": "cust_abc123def456"
+                  },
+                  "points": {
+                    "type": "integer",
+                    "description": "Number of points to redeem. Must be a positive integer and not exceed the customer's balance.",
+                    "example": 200
+                  },
+                  "reward_id": {
+                    "type": "string",
+                    "description": "Optional ID of the reward being redeemed (for tracking purposes).",
+                    "example": "reward_coffee_free"
+                  },
+                  "narration": {
+                    "type": "string",
+                    "description": "Optional note or description for this redemption.",
+                    "example": "Redeemed for free coffee"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Points redeemed successfully. Returns the created ledger entry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Points redeemed successfully"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/PointsTransaction"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error or insufficient points balance.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Customer not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/points/customers/{uid}/transactions": {
+      "get": {
+        "summary": "Get Customer Transaction History",
+        "operationId": "getCustomerTransactions",
+        "description": "Retrieves a paginated list of all point transactions (credits and redemptions) for a specific customer.\n\nTransactions are sorted by date with the most recent first. Use this endpoint to display a customer's points activity history.\n",
+        "tags": [
+          "Points"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "uid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The unique identifier of the customer.",
+            "example": "cust_abc123def456"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            },
+            "description": "Page number for pagination (1-indexed).",
+            "example": 1
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 50
+            },
+            "description": "Number of transactions to return per page.",
+            "example": 20
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Transaction history retrieved successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Transactions retrieved successfully"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PointsTransaction"
+                      }
+                    },
+                    "pagination": {
+                      "$ref": "#/components/schemas/Pagination"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Customer not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
