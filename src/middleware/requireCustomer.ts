@@ -7,7 +7,7 @@ import { logger } from "../utils/logger";
 export const requireCustomer = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const merchantId = req.merchant!.id;
-        const { uid } = req.params;
+        const uid = req.params?.uid || req.body?.customer_uid;
 
         if (!uid) {
             logger.warn("Customer ID missing in request check", { merchant_id: merchantId, path: req.path });

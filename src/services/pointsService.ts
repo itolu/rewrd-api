@@ -1,3 +1,4 @@
+import { db } from "../config/db";
 import { logger } from "../utils/logger";
 import { redisEventService } from "./redisEventService";
 
@@ -36,7 +37,9 @@ export interface PointsTransactionInput {
  * Event types published:
  *   - "points.credit"  → Credit points to a customer
  *   - "points.redeem"  → Debit/redeem points from a customer
- *   - "points.transactions.list" → Fetch transaction history
+ *
+ * Direct DB queries:
+ *   - getCustomerTransactions → Fetches from Pointsledger table
  */
 export class PointsService {
     /**
@@ -113,22 +116,40 @@ export class PointsService {
     }
 
     /**
-     * Get transaction history for a customer via the dashboard backend.
+     * Get transaction history for a customer directly from the database.
      *
-     * Publishes a "points.transactions.list" event and waits for the result.
-     * The dashboard backend returns { transactions, pagination }.
+     * Queries the Pointsledger table for all entries matching the
+     * merchant_id and customer UID, ordered by most recent first.
      */
     async getCustomerTransactions(merchant_id: string, customer_uid: string, page = 1, limit = 50) {
-        logger.info("Publishing points.transactions.list event", { merchant_id, customer_uid, page, limit });
+        logger.info("Fetching customer transactions from DB", { merchant_id, customer_uid, page, limit });
 
-        const result = await redisEventService.requestReply("points.transactions.list", {
-            merchant_id,
-            customer_uid,
-            page,
-            limit,
-        });
+        const offset = (page - 1) * limit;
 
-        return result;
+        // Get total count for pagination
+        const countResult = await db("Pointsledger")
+            .where({ merchant_id, member_uid: customer_uid })
+            .count("id as count")
+            .first();
+
+        const total = Number(countResult?.count || 0);
+
+        // Get paginated transactions
+        const transactions = await db("Pointsledger")
+            .where({ merchant_id, member_uid: customer_uid })
+            .orderBy("created_at", "desc")
+            .limit(limit)
+            .offset(offset);
+
+        return {
+            transactions,
+            pagination: {
+                page,
+                limit,
+                total,
+                total_pages: Math.ceil(total / limit),
+            },
+        };
     }
 }
 

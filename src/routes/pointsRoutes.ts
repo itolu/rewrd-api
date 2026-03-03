@@ -6,6 +6,7 @@ import {
 } from "../controllers/pointsController";
 import { validateRequest } from "../middleware/validateRequest";
 import { requireIdempotency } from "../middleware/idempotency";
+import { requireCustomer } from "../middleware/requireCustomer";
 import {
     creditPointsSchema,
     redeemPointsSchema,
@@ -26,18 +27,22 @@ const router = Router();
  *           type: integer
  *           description: Unique identifier for this transaction.
  *           example: 1284
- *         merchant_id:
- *           type: string
- *           description: The merchant account this transaction belongs to.
- *           example: "merch_xyz789"
  *         customer_uid:
  *           type: string
  *           description: The customer who earned or redeemed points.
  *           example: "cust_abc123def456"
- *         amount:
+ *         points:
  *           type: number
- *           description: Number of points in this transaction. Positive for credits, negative for redemptions.
+ *           description: Number of points in this transaction.
  *           example: 50
+ *         title:
+ *           type: string
+ *           description: Human-readable title for this transaction.
+ *           example: "Points Credit"
+ *         narration:
+ *           type: string
+ *           description: Optional description or note for this transaction.
+ *           example: "Credited 50 points for purchase #12345"
  *         transaction_type:
  *           type: string
  *           description: |
@@ -47,18 +52,22 @@ const router = Router();
  *             - `member_purchase_order_earned_percentage` — points earned via a percentage earning rule
  *             - `member_purchase_order_redeemed` — points redeemed
  *           example: "member_points_adjustment_credit"
+ *         ledger_type:
+ *           type: string
+ *           description: Generic type of ledger entry (credit or debit).
+ *           example: "credit"
+ *         status:
+ *           type: string
+ *           description: Status of the transaction.
+ *           example: "successful"
  *         reference_id:
  *           type: string
  *           description: Unique reference ID for this transaction, used for deduplication.
  *           example: "credit_a1b2c3d4-e5f6-7890"
- *         title:
- *           type: string
- *           description: Human-readable title for this transaction.
- *           example: "Points Credit"
- *         narration:
- *           type: string
- *           description: Optional description or note for this transaction.
- *           example: "Credited 50 points for purchase #12345"
+ *         balance_before:
+ *           type: number
+ *           description: Customer's points balance before this transaction was applied.
+ *           example: 1500
  *         balance_after:
  *           type: number
  *           description: Customer's points balance after this transaction was applied.
@@ -161,7 +170,7 @@ const router = Router();
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post("/credit", requireIdempotency, validateRequest(creditPointsSchema), creditPoints);
+router.post("/credit", requireIdempotency, validateRequest(creditPointsSchema), requireCustomer, creditPoints);
 
 /**
  * @swagger
@@ -252,7 +261,7 @@ router.post("/credit", requireIdempotency, validateRequest(creditPointsSchema), 
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post("/redeem", requireIdempotency, validateRequest(redeemPointsSchema), redeemPoints);
+router.post("/redeem", requireIdempotency, validateRequest(redeemPointsSchema), requireCustomer, redeemPoints);
 
 /**
  * @swagger
@@ -322,6 +331,6 @@ router.post("/redeem", requireIdempotency, validateRequest(redeemPointsSchema), 
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.get("/customers/:uid/transactions", validateRequest(getTransactionsSchema), getCustomerTransactions);
+router.get("/customers/:uid/transactions", validateRequest(getTransactionsSchema), requireCustomer, getCustomerTransactions);
 
 export default router;

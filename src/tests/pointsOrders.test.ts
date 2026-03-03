@@ -214,6 +214,20 @@ describe("Points Module", () => {
             expect(res.status).toBe(400);
             expect(res.body.error.code).toBe("insufficient_merchant_points");
         });
+
+        it("should fail if customer does not belong to merchant", async () => {
+            const res = await request(app)
+                .post("/v1/points/credit")
+                .set("Authorization", `Bearer ${apiKey}`)
+                .set("Idempotency-Key", `key_${crypto.randomUUID()}`)
+                .send({
+                    customer_uid: "non_existent_uid",
+                    points: 10
+                });
+
+            expect(res.status).toBe(404);
+            expect(res.body.error.code).toBe("customer_not_found");
+        });
     });
 
     describe("POST /v1/points/redeem", () => {
@@ -274,19 +288,50 @@ describe("Points Module", () => {
             expect(res.status).toBe(400);
             expect(res.body.error.code).toBe("insufficient_points");
         });
+
+        it("should fail if customer does not belong to merchant", async () => {
+            const res = await request(app)
+                .post("/v1/points/redeem")
+                .set("Authorization", `Bearer ${apiKey}`)
+                .set("Idempotency-Key", `key_${crypto.randomUUID()}`)
+                .send({
+                    customer_uid: "non_existent_uid",
+                    points: 10
+                });
+
+            expect(res.status).toBe(404);
+            expect(res.body.error.code).toBe("customer_not_found");
+        });
     });
 
     describe("GET /v1/points/customers/:uid/transactions", () => {
-        it("should retrieve transaction history", async () => {
-            // Mock the dashboard backend response
-            mockRequestReply.mockResolvedValueOnce({
-                transactions: [
-                    { id: 1, ledger_type: "credit", points: 100 },
-                    { id: 2, ledger_type: "debit", points: 50 },
-                ],
-                pagination: { page: 1, limit: 50, total: 2, total_pages: 1 },
-            });
+        beforeAll(async () => {
+            // Seed ledger rows for the test customer
+            await db("Pointsledger").insert([
+                {
+                    merchant_id: merchantId,
+                    member_uid: customerUid,
+                    ledger_type: "credit",
+                    transaction_type: "member_points_adjustment_credit",
+                    points: 100,
+                    reference_id: `ref_tx_${crypto.randomUUID()}`,
+                    title: "Points Credit",
+                    status: "successful",
+                },
+                {
+                    merchant_id: merchantId,
+                    member_uid: customerUid,
+                    ledger_type: "debit",
+                    transaction_type: "member_purchase_order_redeemed",
+                    points: 50,
+                    reference_id: `ref_tx_${crypto.randomUUID()}`,
+                    title: "Point Redemption",
+                    status: "successful",
+                },
+            ]);
+        });
 
+        it("should retrieve transaction history from the database", async () => {
             const res = await request(app)
                 .get(`/v1/points/customers/${customerUid}/transactions`)
                 .set("Authorization", `Bearer ${apiKey}`);
@@ -294,13 +339,30 @@ describe("Points Module", () => {
             expect(res.status).toBe(200);
             expect(res.body.status).toBe(true);
             expect(Array.isArray(res.body.data)).toBe(true);
+            expect(res.body.data.length).toBe(2);
             expect(res.body.pagination).toBeDefined();
+            expect(res.body.pagination.total).toBe(2);
+            expect(res.body.pagination.total_pages).toBe(1);
+        });
 
-            // Verify the event was published
-            expect(mockRequestReply).toHaveBeenCalledWith("points.transactions.list", expect.objectContaining({
-                merchant_id: merchantId,
-                customer_uid: customerUid,
-            }));
+        it("should paginate transaction results", async () => {
+            const res = await request(app)
+                .get(`/v1/points/customers/${customerUid}/transactions?page=1&limit=1`)
+                .set("Authorization", `Bearer ${apiKey}`);
+
+            expect(res.status).toBe(200);
+            expect(res.body.data.length).toBe(1);
+            expect(res.body.pagination.total).toBe(2);
+            expect(res.body.pagination.total_pages).toBe(2);
+        });
+
+        it("should return 404 if customer not found", async () => {
+            const res = await request(app)
+                .get("/v1/points/customers/non_existent_uid/transactions")
+                .set("Authorization", `Bearer ${apiKey}`);
+
+            expect(res.status).toBe(404);
+            expect(res.body.error.code).toBe("customer_not_found");
         });
     });
 });

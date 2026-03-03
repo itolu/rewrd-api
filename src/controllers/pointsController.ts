@@ -5,6 +5,7 @@ import { AppError } from "../utils/AppError";
 import { pointsService } from "../services/pointsService";
 import { Request, Response, NextFunction } from "express";
 import { webhookService } from "../services/webhookService";
+import { toPointsTransactionResponse } from "../dtos/points.dto";
 
 export const creditPoints = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -58,7 +59,7 @@ export const creditPoints = async (req: Request, res: Response, next: NextFuncti
         return res.status(200).json({
             status: true,
             message: "Points credited successfully",
-            data: ledger
+            data: toPointsTransactionResponse(ledger)
         });
     } catch (error) {
         next(error);
@@ -92,7 +93,7 @@ export const redeemPoints = async (req: Request, res: Response, next: NextFuncti
         return res.status(200).json({
             status: true,
             message: "Points redeemed successfully",
-            data: ledger
+            data: toPointsTransactionResponse(ledger)
         });
     } catch (error) {
         next(error);
@@ -115,7 +116,7 @@ export const getCustomerTransactions = async (req: Request, res: Response, next:
         return res.status(200).json({
             status: true,
             message: "Transactions retrieved successfully",
-            data: result.transactions,
+            data: result.transactions.map(toPointsTransactionResponse),
             pagination: result.pagination
         });
     } catch (error) {
