@@ -382,7 +382,7 @@ router.patch("/config", requireMerchant, validateRequest(updateConfigSchema), up
  *     description: |
  *       Retrieves all active (non-deleted) earning rules for your merchant account.
  *
- *       Earning rules define how customers earn points. Each rule has a name, point value, and type. Use the rule `id` when crediting points via the [`POST /points/credit`](#/Points/creditPoints) endpoint to automatically associate the credit with the rule.
+ *       Earning rules define how customers earn points. Each rule has a name, point value, and type. Use the rule `id` when rewarding points via the [`POST /points/transaction`](#/Points/processPointsTransaction) endpoint to automatically associate the reward with the rule.
  *     tags: [Merchant]
  *     security:
  *       - BearerAuth: []

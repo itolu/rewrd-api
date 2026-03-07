@@ -1,21 +1,23 @@
 import { z } from "zod";
 
-export const creditPointsSchema = z.object({
+export const transactionSchema = z.object({
     body: z.object({
         customer_uid: z.string().min(1, "Customer UID is required"),
-        points: z.number().int().positive("Points must be a positive integer"),
-        rule_id: z.number().int().positive().optional(),
-        narration: z.string().optional(),
-        order_id: z.string().optional()
-    })
-});
-
-export const redeemPointsSchema = z.object({
-    body: z.object({
-        customer_uid: z.string().min(1, "Customer UID is required"),
-        points: z.number().int().positive("Points to redeem must be a positive integer"),
-        reward_id: z.string().optional(),
-        narration: z.string().optional()
+        order_id: z.string().min(1, "Order ID is required"),
+        order_value: z.number().positive("Order value must be positive"),
+        redeem: z.boolean(),
+        reward: z.boolean(),
+        deduct_points: z.number().int().positive().optional(),
+        way_to_earn_id: z.number().int().positive().optional()
+    }).refine((data) => !(data.redeem) || data.deduct_points !== undefined, {
+        message: "deduct_points is required when redeem is true",
+        path: ["deduct_points"]
+    }).refine((data) => !(data.reward) || data.way_to_earn_id !== undefined, {
+        message: "way_to_earn_id is required when reward is true",
+        path: ["way_to_earn_id"]
+    }).refine((data) => data.redeem || data.reward, {
+        message: "At least one of 'redeem' or 'reward' must be true",
+        path: ["redeem"]
     })
 });
 

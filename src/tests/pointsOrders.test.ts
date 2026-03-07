@@ -110,8 +110,8 @@ describe("Points Module", () => {
         jest.clearAllMocks();
     });
 
-    describe("POST /v1/points/credit", () => {
-        it("should credit points to a customer", async () => {
+    describe("POST /v1/points/transaction", () => {
+        it("should process a reward-only transaction", async () => {
             const idempotencyKey = `key_${crypto.randomUUID()}`;
 
             // Mock the dashboard backend response
@@ -127,116 +127,43 @@ describe("Points Module", () => {
             });
 
             const res = await request(app)
-                .post("/v1/points/credit")
+                .post("/v1/points/transaction")
                 .set("Authorization", `Bearer ${apiKey}`)
                 .set("Idempotency-Key", idempotencyKey)
                 .send({
                     customer_uid: customerUid,
-                    points: 100
+                    order_id: "ORD-001",
+                    order_value: 10000,
+                    redeem: false,
+                    reward: true,
+                    way_to_earn_id: ruleId
                 });
 
             expect(res.status).toBe(200);
             expect(res.body.status).toBe(true);
-            expect(res.body.message).toBe("Points credited successfully");
-            expect(res.body.data.ledger_type).toBe("credit");
-            expect(Number(res.body.data.points)).toBe(100);
+            expect(res.body.message).toBe("Transaction processed successfully");
 
             // Verify the event was published with correct data
-            expect(mockRequestReply).toHaveBeenCalledWith("points.credit", expect.objectContaining({
-                merchant_id: merchantId,
-                customer_uid: customerUid,
-                amount: 100,
+            expect(mockRequestReply).toHaveBeenCalledWith("points.redeemreward", expect.objectContaining({
+                event: "points.redeemreward",
+                data: expect.objectContaining({
+                    merchant_id: merchantId,
+                    member_uid: customerUid,
+                    order_id: "ORD-001",
+                    order_value: 10000,
+                    redeem: false,
+                    reward: true,
+                    way_to_earn_id: ruleId
+                }),
+                signature: expect.any(String)
             }));
         });
 
-        it("should credit points with a rule_id and update rule stats", async () => {
+        it("should process a redeem-only transaction", async () => {
             const idempotencyKey = `key_${crypto.randomUUID()}`;
 
-            // Mock the dashboard backend response
             mockRequestReply.mockResolvedValueOnce({
                 id: 2,
-                merchant_id: merchantId,
-                member_uid: customerUid,
-                ledger_type: "credit",
-                points: 50,
-                title: "Test Fixed Rule",
-                status: "successful",
-            });
-
-            const res = await request(app)
-                .post("/v1/points/credit")
-                .set("Authorization", `Bearer ${apiKey}`)
-                .set("Idempotency-Key", idempotencyKey)
-                .send({
-                    customer_uid: customerUid,
-                    points: 50,
-                    rule_id: ruleId
-                });
-
-            expect(res.status).toBe(200);
-            expect(res.body.status).toBe(true);
-            expect(res.body.data.ledger_type).toBe("credit");
-            expect(Number(res.body.data.points)).toBe(50);
-            expect(res.body.data.title).toBe("Test Fixed Rule");
-        });
-
-        it("should fail with invalid rule_id", async () => {
-            const res = await request(app)
-                .post("/v1/points/credit")
-                .set("Authorization", `Bearer ${apiKey}`)
-                .set("Idempotency-Key", `key_${crypto.randomUUID()}`)
-                .send({
-                    customer_uid: customerUid,
-                    points: 10,
-                    rule_id: 999999
-                });
-
-            expect(res.status).toBe(404);
-            expect(res.body.error.code).toBe("rule_not_found");
-        });
-
-        it("should handle dashboard backend error (e.g. insufficient merchant points)", async () => {
-            // Simulate the dashboard backend returning an error
-            const { AppError } = require("../utils/AppError");
-            mockRequestReply.mockRejectedValueOnce(
-                new AppError("Insufficient merchant point balance", 400, "insufficient_merchant_points")
-            );
-
-            const res = await request(app)
-                .post("/v1/points/credit")
-                .set("Authorization", `Bearer ${apiKey}`)
-                .set("Idempotency-Key", `key_${crypto.randomUUID()}`)
-                .send({
-                    customer_uid: customerUid,
-                    points: 999999999
-                });
-
-            expect(res.status).toBe(400);
-            expect(res.body.error.code).toBe("insufficient_merchant_points");
-        });
-
-        it("should fail if customer does not belong to merchant", async () => {
-            const res = await request(app)
-                .post("/v1/points/credit")
-                .set("Authorization", `Bearer ${apiKey}`)
-                .set("Idempotency-Key", `key_${crypto.randomUUID()}`)
-                .send({
-                    customer_uid: "non_existent_uid",
-                    points: 10
-                });
-
-            expect(res.status).toBe(404);
-            expect(res.body.error.code).toBe("customer_not_found");
-        });
-    });
-
-    describe("POST /v1/points/redeem", () => {
-        it("should redeem points from a customer's balance", async () => {
-            const idempotencyKey = `key_${crypto.randomUUID()}`;
-
-            // Mock the dashboard backend response
-            mockRequestReply.mockResolvedValueOnce({
-                id: 3,
                 merchant_id: merchantId,
                 member_uid: customerUid,
                 ledger_type: "debit",
@@ -247,26 +174,116 @@ describe("Points Module", () => {
             });
 
             const res = await request(app)
-                .post("/v1/points/redeem")
+                .post("/v1/points/transaction")
                 .set("Authorization", `Bearer ${apiKey}`)
                 .set("Idempotency-Key", idempotencyKey)
                 .send({
                     customer_uid: customerUid,
-                    points: 50,
-                    narration: "Test redemption"
+                    order_id: "ORD-002",
+                    order_value: 5000,
+                    redeem: true,
+                    reward: false,
+                    deduct_points: 50
                 });
 
             expect(res.status).toBe(200);
             expect(res.body.status).toBe(true);
-            expect(res.body.data.ledger_type).toBe("debit");
-            expect(Number(res.body.data.points)).toBe(50);
 
-            // Verify the event was published
-            expect(mockRequestReply).toHaveBeenCalledWith("points.redeem", expect.objectContaining({
-                merchant_id: merchantId,
-                customer_uid: customerUid,
-                amount: 50,
+            expect(mockRequestReply).toHaveBeenCalledWith("points.redeemreward", expect.objectContaining({
+                event: "points.redeemreward",
+                data: expect.objectContaining({
+                    merchant_id: merchantId,
+                    member_uid: customerUid,
+                    redeem: true,
+                    reward: false,
+                    deduct_points: 50
+                })
             }));
+        });
+
+        it("should process a simultaneous reward & redeem transaction", async () => {
+            mockRequestReply.mockResolvedValueOnce([
+                { id: 3, ledger_type: "debit", points: 200 },
+                { id: 4, ledger_type: "credit", points: 50 }
+            ]);
+
+            const res = await request(app)
+                .post("/v1/points/transaction")
+                .set("Authorization", `Bearer ${apiKey}`)
+                .set("Idempotency-Key", `key_${crypto.randomUUID()}`)
+                .send({
+                    customer_uid: customerUid,
+                    order_id: "ORD-003",
+                    order_value: 10000,
+                    redeem: true,
+                    reward: true,
+                    deduct_points: 200,
+                    way_to_earn_id: ruleId
+                });
+
+            expect(res.status).toBe(200);
+            expect(res.body.status).toBe(true);
+            expect(Array.isArray(res.body.data)).toBe(true);
+
+            expect(mockRequestReply).toHaveBeenCalledWith("points.redeemreward", expect.objectContaining({
+                event: "points.redeemreward",
+                data: expect.objectContaining({
+                    redeem: true,
+                    reward: true,
+                })
+            }));
+        });
+
+        it("should fail validation if reward is true but way_to_earn_id is missing", async () => {
+            const res = await request(app)
+                .post("/v1/points/transaction")
+                .set("Authorization", `Bearer ${apiKey}`)
+                .set("Idempotency-Key", `key_${crypto.randomUUID()}`)
+                .send({
+                    customer_uid: customerUid,
+                    order_id: "ORD-004",
+                    order_value: 10000,
+                    redeem: false,
+                    reward: true
+                });
+
+            expect(res.status).toBe(400);
+            expect(res.body.message).toContain("way_to_earn_id is required");
+        });
+
+        it("should fail validation if redeem is true but deduct_points is missing", async () => {
+            const res = await request(app)
+                .post("/v1/points/transaction")
+                .set("Authorization", `Bearer ${apiKey}`)
+                .set("Idempotency-Key", `key_${crypto.randomUUID()}`)
+                .send({
+                    customer_uid: customerUid,
+                    order_id: "ORD-005",
+                    order_value: 10000,
+                    redeem: true,
+                    reward: false
+                });
+
+            expect(res.status).toBe(400);
+            expect(res.body.message).toContain("deduct_points is required");
+        });
+
+        it("should fail with invalid rule_id for reward", async () => {
+            const res = await request(app)
+                .post("/v1/points/transaction")
+                .set("Authorization", `Bearer ${apiKey}`)
+                .set("Idempotency-Key", `key_${crypto.randomUUID()}`)
+                .send({
+                    customer_uid: customerUid,
+                    order_id: "ORD-006",
+                    order_value: 10000,
+                    redeem: false,
+                    reward: true,
+                    way_to_earn_id: 999999
+                });
+
+            expect(res.status).toBe(404);
+            expect(res.body.error.code).toBe("rule_not_found");
         });
 
         it("should handle dashboard backend error (e.g. insufficient points)", async () => {
@@ -276,31 +293,20 @@ describe("Points Module", () => {
             );
 
             const res = await request(app)
-                .post("/v1/points/redeem")
+                .post("/v1/points/transaction")
                 .set("Authorization", `Bearer ${apiKey}`)
                 .set("Idempotency-Key", `key_${crypto.randomUUID()}`)
                 .send({
                     customer_uid: customerUid,
-                    points: 999999,
-                    narration: "Insufficient test"
+                    order_id: "ORD-007",
+                    order_value: 5000,
+                    redeem: true,
+                    reward: false,
+                    deduct_points: 99999
                 });
 
             expect(res.status).toBe(400);
             expect(res.body.error.code).toBe("insufficient_points");
-        });
-
-        it("should fail if customer does not belong to merchant", async () => {
-            const res = await request(app)
-                .post("/v1/points/redeem")
-                .set("Authorization", `Bearer ${apiKey}`)
-                .set("Idempotency-Key", `key_${crypto.randomUUID()}`)
-                .send({
-                    customer_uid: "non_existent_uid",
-                    points: 10
-                });
-
-            expect(res.status).toBe(404);
-            expect(res.body.error.code).toBe("customer_not_found");
         });
     });
 

@@ -1,15 +1,13 @@
 import { Router } from "express";
 import {
-    creditPoints,
-    redeemPoints,
+    processPointsTransaction,
     getCustomerTransactions
 } from "../controllers/pointsController";
 import { validateRequest } from "../middleware/validateRequest";
 import { requireIdempotency } from "../middleware/idempotency";
 import { requireCustomer } from "../middleware/requireCustomer";
 import {
-    creditPointsSchema,
-    redeemPointsSchema,
+    transactionSchema,
     getTransactionsSchema
 } from "../schema/pointsSchema";
 
@@ -81,113 +79,20 @@ const router = Router();
 
 /**
  * @swagger
- * /points/credit:
+ * /points/transaction:
  *   post:
- *     summary: Credit Points to a Customer
- *     operationId: creditPoints
+ *     summary: Process a Unified Points Transaction
+ *     operationId: processPointsTransaction
  *     description: |
- *       Awards loyalty points to a customer's account. The specified number of points is added to the customer's balance and deducted from your merchant point pool.
+ *       Performs a singular, unified points transaction supporting either "Reward" generation, "Redemption" deduction, or simultaneous checkout operations.
  *
- *       **Earning Rule Association (optional):**
- *       You can associate the credit with an earning rule by providing a `rule_id`. This links the transaction to the rule for analytics and automatically uses the rule's name and type in the transaction record. The rule must be `active` and not deleted.
+ *       Both `redeem` and `reward` flags dictate the ledger action.
  *
- *       **Webhooks:**
- *       A `points.earned` webhook event is fired after a successful credit, containing the `customer_uid`, `points`, `rule_id`, and `ledger_id`.
+ *       **If Reward is true:**
+ *       `way_to_earn_id` is required. Will credit the equivalent rule earnings against the `order_value`.
  *
- *       This endpoint requires an `Idempotency-Key` header to prevent duplicate credits.
- *     tags: [Points]
- *     security:
- *       - BearerAuth: []
- *     parameters:
- *       - in: header
- *         name: Idempotency-Key
- *         required: true
- *         schema:
- *           type: string
- *           pattern: '^[a-zA-Z0-9_-]{1,100}$'
- *         description: Unique key for idempotent request handling. Must be alphanumeric with hyphens or underscores, 1–100 characters.
- *         example: "credit-cust123-20260225-001"
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [customer_uid, points]
- *             properties:
- *               customer_uid:
- *                 type: string
- *                 description: The UID of the customer to credit points to.
- *                 example: "cust_abc123def456"
- *               points:
- *                 type: integer
- *                 description: Number of points to credit. Must be a positive integer.
- *                 example: 50
- *               rule_id:
- *                 type: integer
- *                 description: Optional ID of an earning rule to associate with this credit. The rule must be active.
- *                 example: 42
- *               narration:
- *                 type: string
- *                 description: Optional note or description for this transaction.
- *                 example: "Reward for purchase #12345"
- *               order_id:
- *                 type: string
- *                 description: Optional external order ID to link this credit to a specific purchase.
- *                 example: "order_98765"
- *     responses:
- *       200:
- *         description: Points credited successfully. Returns the created ledger entry.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 status:
- *                   type: boolean
- *                   example: true
- *                 message:
- *                   type: string
- *                   example: "Points credited successfully"
- *                 data:
- *                   $ref: '#/components/schemas/PointsTransaction'
- *       400:
- *         description: Validation error — missing required fields or invalid values.
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- *       404:
- *         description: Customer or earning rule not found.
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- *       401:
- *         description: Unauthorized — missing or invalid API key.
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- */
-router.post("/credit", requireIdempotency, validateRequest(creditPointsSchema), requireCustomer, creditPoints);
-
-/**
- * @swagger
- * /points/redeem:
- *   post:
- *     summary: Redeem Points
- *     operationId: redeemPoints
- *     description: |
- *       Deducts loyalty points from a customer's account for a redemption. The specified number of points is subtracted from the customer's balance and added back to your merchant point pool.
- *
- *       **Balance checks:**
- *       - The customer must have sufficient points balance to cover the redemption.
- *       - The customer must meet the configured minimum threshold amount for redemption.
- *       - The customer must be in `active` status (not restricted).
- *
- *       **Webhooks:**
- *       A `points.redeemed` webhook event is fired after a successful redemption, containing the `customer_uid`, `points`, `reward_id`, and `ledger_id`.
+ *       **If Redeem is true:**
+ *       `deduct_points` is required. Will debit those values from customer balance toward `order_value`.
  *
  *       This endpoint requires an `Idempotency-Key` header to prevent duplicate redemptions.
  *     tags: [Points]
@@ -201,34 +106,46 @@ router.post("/credit", requireIdempotency, validateRequest(creditPointsSchema), 
  *           type: string
  *           pattern: '^[a-zA-Z0-9_-]{1,100}$'
  *         description: Unique key for idempotent request handling. Must be alphanumeric with hyphens or underscores, 1–100 characters.
- *         example: "redeem-cust123-20260225-001"
+ *         example: "tx-cust123-20260225-001"
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
  *             type: object
- *             required: [customer_uid, points]
+ *             required: [customer_uid, order_id, order_value, redeem, reward]
  *             properties:
  *               customer_uid:
  *                 type: string
- *                 description: The UID of the customer to redeem points from.
- *                 example: "cust_abc123def456"
- *               points:
+ *                 description: The UID of the customer making the checkout.
+ *                 example: "cust_abc123"
+ *               order_id:
+ *                 type: string
+ *                 description: External order ID tying this points usage to a checkout basket.
+ *                 example: "ORD-003"
+ *               order_value:
+ *                 type: number
+ *                 description: The fiat value of the items in the total basket.
+ *                 example: 10000
+ *               redeem:
+ *                 type: boolean
+ *                 description: True if the customer is choosing to deduct points towards the purchase.
+ *                 example: true
+ *               reward:
+ *                 type: boolean
+ *                 description: True if the order creates an earning opportunity.
+ *                 example: true
+ *               deduct_points:
  *                 type: integer
- *                 description: Number of points to redeem. Must be a positive integer and not exceed the customer's balance.
+ *                 description: Quantity of points exactly to be removed (required if redeem is true).
  *                 example: 200
- *               reward_id:
- *                 type: string
- *                 description: Optional ID of the reward being redeemed (for tracking purposes).
- *                 example: "reward_coffee_free"
- *               narration:
- *                 type: string
- *                 description: Optional note or description for this redemption.
- *                 example: "Redeemed for free coffee"
+ *               way_to_earn_id:
+ *                 type: integer
+ *                 description: Pre-configured loyalty mechanism integer rule (required if reward is true).
+ *                 example: 1
  *     responses:
  *       200:
- *         description: Points redeemed successfully. Returns the created ledger entry.
+ *         description: Transaction executed properly.
  *         content:
  *           application/json:
  *             schema:
@@ -239,29 +156,19 @@ router.post("/credit", requireIdempotency, validateRequest(creditPointsSchema), 
  *                   example: true
  *                 message:
  *                   type: string
- *                   example: "Points redeemed successfully"
+ *                   example: "Transaction processed successfully"
  *                 data:
- *                   $ref: '#/components/schemas/PointsTransaction'
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/PointsTransaction'
  *       400:
- *         description: Validation error or insufficient points balance.
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
+ *         description: Validation error — missing required condition triggers.
  *       404:
- *         description: Customer not found.
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
+ *         description: Customer or earning rule not found.
  *       401:
  *         description: Unauthorized — missing or invalid API key.
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post("/redeem", requireIdempotency, validateRequest(redeemPointsSchema), requireCustomer, redeemPoints);
+router.post("/transaction", requireIdempotency, validateRequest(transactionSchema), requireCustomer, processPointsTransaction);
 
 /**
  * @swagger

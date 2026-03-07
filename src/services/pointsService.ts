@@ -1,4 +1,6 @@
+import crypto from "crypto";
 import { db } from "../config/db";
+import { env } from "../config/env";
 import { logger } from "../utils/logger";
 import { redisEventService } from "./redisEventService";
 
@@ -16,13 +18,13 @@ export enum PointsTransactionStatus {
 export interface PointsTransactionInput {
     merchant_id: string;
     customer_uid: string;
-    amount: number;
-    transaction_type: string;
-    reference_id: string;
-    title: string;
-    narration?: string;
-    order_id?: string;
-    metadata?: any;
+    request_id?: string;
+    order_id: string;
+    order_value: number;
+    redeem: boolean;
+    reward: boolean;
+    deduct_points?: number;
+    way_to_earn_id?: number;
 }
 
 /**
@@ -43,76 +45,56 @@ export interface PointsTransactionInput {
  */
 export class PointsService {
     /**
-     * Credit points to a customer via the dashboard backend.
+     * Process a unified point transaction (reward and/or redeem) via the dashboard backend.
      *
-     * Publishes a "points.credit" event and waits for the result.
-     * The dashboard backend is expected to:
-     *   1. Validate merchant has sufficient point balance
-     *   2. Deduct from merchant balance
-     *   3. Add to customer balance
-     *   4. Create a ledger entry
-     *   5. Return the ledger entry
+     * Publishes a "points.redeemreward" event and waits for the result.
+     * The dashboard backend handles:
+     *   1. Validating merchant and customer balances
+     *   2. Creating necessary ledger entries
      */
-    async creditPoints(input: PointsTransactionInput) {
-        const { merchant_id, customer_uid, amount, reference_id } = input;
+    async processTransaction(input: PointsTransactionInput) {
+        const { merchant_id, customer_uid, request_id, ...transactionData } = input;
 
-        logger.info("Publishing points.credit event", { merchant_id, customer_uid, amount, reference_id });
-
-        const ledgerEntry = await redisEventService.requestReply("points.credit", {
+        logger.info("Publishing points.redeemreward event", {
             merchant_id,
             customer_uid,
-            amount,
-            transaction_type: input.transaction_type,
-            reference_id,
-            title: input.title,
-            narration: input.narration,
-            order_id: input.order_id,
+            order_id: transactionData.order_id,
+            redeem: transactionData.redeem,
+            reward: transactionData.reward
         });
 
-        logger.info("Points credited successfully via dashboard backend", {
+        const finalRequestId = request_id || crypto.randomUUID();
+
+        const dataPayload = {
+            merchant_id,
+            member_uid: customer_uid,
+            ...transactionData
+        };
+
+        const signaturePayload = JSON.stringify({
+            event: "points.redeemreward",
+            request_id: finalRequestId,
+            data: dataPayload
+        });
+
+        const signature = crypto.createHmac("sha256", env.REWRD_SIGNATURE_KEY)
+            .update(signaturePayload)
+            .digest("hex");
+
+        const ledgerEntries = await redisEventService.requestReply("points.redeemreward", {
+            event: "points.redeemreward",
+            request_id: finalRequestId,
+            data: dataPayload,
+            signature
+        });
+
+        logger.info("Points transaction processed successfully via dashboard backend", {
             merchant_id,
             customer_uid,
-            ledger_id: ledgerEntry?.id,
+            order_id: transactionData.order_id
         });
 
-        return ledgerEntry;
-    }
-
-    /**
-     * Debit/redeem points from a customer via the dashboard backend.
-     *
-     * Publishes a "points.redeem" event and waits for the result.
-     * The dashboard backend is expected to:
-     *   1. Validate customer has sufficient points
-     *   2. Deduct from customer balance
-     *   3. Return points to merchant balance
-     *   4. Create a ledger entry
-     *   5. Return the ledger entry
-     */
-    async debitPoints(input: PointsTransactionInput) {
-        const { merchant_id, customer_uid, amount, reference_id } = input;
-
-        logger.info("Publishing points.redeem event", { merchant_id, customer_uid, amount, reference_id });
-
-        const ledgerEntry = await redisEventService.requestReply("points.redeem", {
-            merchant_id,
-            customer_uid,
-            amount,
-            transaction_type: input.transaction_type,
-            reference_id,
-            title: input.title,
-            narration: input.narration,
-            order_id: input.order_id,
-            metadata: input.metadata,
-        });
-
-        logger.info("Points debited successfully via dashboard backend", {
-            merchant_id,
-            customer_uid,
-            ledger_id: ledgerEntry?.id,
-        });
-
-        return ledgerEntry;
+        return ledgerEntries;
     }
 
     /**

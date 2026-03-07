@@ -7,93 +7,67 @@ import { Request, Response, NextFunction } from "express";
 import { webhookService } from "../services/webhookService";
 import { toPointsTransactionResponse } from "../dtos/points.dto";
 
-export const creditPoints = async (req: Request, res: Response, next: NextFunction) => {
+export const processPointsTransaction = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const merchant_id = req.merchant!.id;
-        const { customer_uid, points, rule_id, narration, order_id } = req.body;
+        const {
+            customer_uid,
+            order_id,
+            order_value,
+            redeem,
+            reward,
+            deduct_points,
+            way_to_earn_id
+        } = req.body;
 
-        let title = "Points Credit";
-        let transactionType = "member_points_adjustment_credit";
-
-        // If rule_id is provided, validate it
-        if (rule_id) {
+        // If a reward transaction, optionally validate the earning rule
+        if (reward && way_to_earn_id) {
             const rule = await db("WaysToEarn")
-                .where({ id: rule_id, merchant_id, status: "active", deleted: false })
+                .where({ id: way_to_earn_id, merchant_id, status: "active", deleted: false })
                 .first();
 
             if (!rule) {
                 throw new AppError("Earning rule not found or inactive", 404, "rule_not_found");
             }
-
-            title = rule.name || "Rule Credit";
-            transactionType = rule.earning_type === "percentage_off"
-                ? "member_purchase_order_earned_percentage"
-                : "member_purchase_order_earned_fixed";
-
-            // Increment rule usage (non-critical)
-            db("WaysToEarn")
-                .where({ id: rule_id })
-                .increment("users_rewarded", 1)
-                .catch(err => logger.error("Failed to update rule usage stats", { rule_id, error: err.message }));
         }
 
-        const ledger = await pointsService.creditPoints({
+        const request_id = req.headers["x-request-id"] as string | undefined;
+
+        const ledgerEntries = await pointsService.processTransaction({
             merchant_id,
             customer_uid,
-            amount: points,
-            transaction_type: transactionType,
-            reference_id: `credit_${crypto.randomUUID()}`,
-            title,
-            narration: narration || `Credited ${points} points`,
-            order_id
+            request_id,
+            order_id,
+            order_value,
+            redeem,
+            reward,
+            deduct_points,
+            way_to_earn_id
         });
 
-        // Fire webhook
-        webhookService.sendWebhook(merchant_id, "points.earned", {
-            customer_uid,
-            points,
-            rule_id: rule_id || null,
-            ledger_id: ledger.id
-        });
+        // Fire appropriate webhooks based on boolean flags
+        if (reward && ledgerEntries) {
+            webhookService.sendWebhook(merchant_id, "points.earned", {
+                customer_uid,
+                order_id,
+                order_value,
+                rule_id: way_to_earn_id || null,
+            });
+        }
+
+        if (redeem && ledgerEntries) {
+            webhookService.sendWebhook(merchant_id, "points.redeemed", {
+                customer_uid,
+                order_id,
+                order_value,
+                deduct_points,
+            });
+        }
 
         return res.status(200).json({
             status: true,
-            message: "Points credited successfully",
-            data: toPointsTransactionResponse(ledger)
-        });
-    } catch (error) {
-        next(error);
-    }
-};
-
-export const redeemPoints = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-        const merchant_id = req.merchant!.id;
-        const { customer_uid, points, narration, reward_id } = req.body;
-
-        const ledger = await pointsService.debitPoints({
-            merchant_id,
-            customer_uid,
-            amount: points,
-            transaction_type: "member_purchase_order_redeemed",
-            reference_id: `redeem_${crypto.randomUUID()}`,
-            title: "Point Redemption",
-            narration: narration || `Redeemed ${points} points`,
-            metadata: { reward_id }
-        });
-
-        // Fire webhook
-        webhookService.sendWebhook(merchant_id, "points.redeemed", {
-            customer_uid,
-            points,
-            reward_id,
-            ledger_id: ledger.id
-        });
-
-        return res.status(200).json({
-            status: true,
-            message: "Points redeemed successfully",
-            data: toPointsTransactionResponse(ledger)
+            message: "Transaction processed successfully",
+            data: ledgerEntries
         });
     } catch (error) {
         next(error);
