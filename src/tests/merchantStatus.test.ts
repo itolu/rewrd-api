@@ -2,6 +2,9 @@ import request from "supertest";
 import app from "../app";
 import { db } from "../config/db";
 import { hashKey } from "../middleware/auth";
+import { customerService } from "../services/customerService";
+
+jest.mock("../services/customerService");
 
 // Mock database
 jest.mock("../config/db", () => {
@@ -63,12 +66,10 @@ describe("Merchant Status Enforcement", () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
-        // Reset hashKey if mocked, but we imported real hashKey so we mock internal crypto or just rely on mocked DB response matching whatever hashKey produces?
-        // Actually, verifyApiKey hashes the input key.
-        // We'll mock the specific DB response to match whatever verifyApiKey produces for validApiKey, OR we just trust the flow.
-        // It's easier to mock the DB response to return a record REGARDLESS of the hash value for "ApiKeys" lookup *if possible*, 
-        // but knex chaining makes that tricky.
-        // Let's refine the mock implementation per test case.
+        (customerService.listCustomers as jest.Mock).mockResolvedValue({
+            data: [],
+            pagination: { page: 1, limit: 50, total: 0, total_pages: 0, has_next: false, has_previous: false }
+        });
     });
 
     // Helper to mock specific status

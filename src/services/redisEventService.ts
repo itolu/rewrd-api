@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { env } from "../config/env";
 import { logger } from "../utils/logger";
 import { AppError } from "../utils/AppError";
 import { redisPublisher, redisSubscriber } from "../config/redis";
@@ -154,7 +155,9 @@ export class RedisEventService {
                     timeoutMs,
                 });
                 reject(new AppError(
-                    `Request to dashboard backend timed out (${eventType})`,
+                    env.NODE_ENV === "production"
+                        ? "Service temporarily unavailable"
+                        : `Request to dashboard backend timed out (${eventType})`,
                     504,
                     "event_timeout"
                 ));
@@ -175,9 +178,11 @@ export class RedisEventService {
                         clearTimeout(timer);
                         this.pendingRequests.delete(correlationId);
                         reject(new AppError(
-                            "No subscribers available to process the event. Dashboard backend may be offline.",
+                            env.NODE_ENV === "production"
+                                ? "Service temporarily unavailable"
+                                : "No subscribers available to process the event. Dashboard backend may be offline.",
                             503,
-                            "no_subscribers"
+                            "service_unavailable" // More generic code than no_subscribers
                         ));
                     }
                 })
@@ -185,7 +190,9 @@ export class RedisEventService {
                     clearTimeout(timer);
                     this.pendingRequests.delete(correlationId);
                     reject(new AppError(
-                        "Failed to publish event to Redis",
+                        env.NODE_ENV === "production"
+                            ? "Service temporarily unavailable"
+                            : "Failed to publish event to Redis",
                         503,
                         "redis_publish_error"
                     ));

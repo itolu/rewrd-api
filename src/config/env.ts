@@ -11,6 +11,7 @@ const envSchema = z.object({
     DB_USER: z.string().default("postgres"),
     DB_HOST: z.string().default("localhost"),
     DB_PASSWORD: z.string().default("postgres"),
+    REWRD_SIGNATURE_KEY: z.string().default("rewrd"),
     REDIS_URL: z.string().default("redis://localhost:6379"),
     SWAGGER_ROUTE_SECRET: z.string().default("api-docs-hidden"),
     NODE_ENV: z.enum(["development", "production", "test"]).default("development"),

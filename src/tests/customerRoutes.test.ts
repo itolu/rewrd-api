@@ -19,11 +19,7 @@ const mockCustomer = {
     uid: "cus_123",
     merchant_id: "mer_test_123",
     email: "test@example.com",
-    phone_number: "1234567890",
-    name: "Test User",
-    first_name: null,
-    last_name: null,
-    date_of_birth: null,
+    phone_number: "+2348012345678",
     status: "active",
     points_balance: 0,
     created_at: new Date().toISOString(),
@@ -33,7 +29,7 @@ const mockCustomer = {
 const mockCustomerResponse = {
     uid: "cus_123",
     email: "test@example.com",
-    phone_number: "1234567890",
+    phone_number: "+2348012345678",
     first_name: null,
     last_name: null,
     date_of_birth: null,
@@ -55,9 +51,8 @@ describe("Customer Routes", () => {
                 .post("/v1/customers")
                 .set("Idempotency-Key", "test-create-customer-001")
                 .send({
-                    email: "test@example.com",
-                    phone_number: "1234567890",
-                    name: "Test User"
+                    customer_email: "test@example.com",
+                    phone_number: "+2348012345678",
                 });
 
             expect(res.status).toBe(200);
@@ -65,7 +60,8 @@ describe("Customer Routes", () => {
             expect(res.body.data).toEqual(mockCustomerResponse);
             expect(customerService.createOrUpdateCustomer).toHaveBeenCalledWith(expect.objectContaining({
                 merchant_id: "mer_test_123",
-                email: "test@example.com"
+                customer_email: "test@example.com",
+                phone_number: "+2348012345678",
             }));
         });
 
@@ -76,12 +72,8 @@ describe("Customer Routes", () => {
                 .post("/v1/customers")
                 .set("Idempotency-Key", "user-repro-key")
                 .send({
-                    "email": "user@example.com",
-                    "phone_number": "09092923990",
-                    "name": "string",
-                    "first_name": "string",
-                    "last_name": "string",
-                    "date_of_birth": "2026-02-12T04:49:03.933Z"
+                    "customer_email": "user@example.com",
+                    "phone_number": "+2349092923990"
                 });
 
             console.log("USER REPRO RESPONSE:", JSON.stringify(res.body, null, 2));
@@ -93,7 +85,7 @@ describe("Customer Routes", () => {
                 .post("/v1/customers")
                 .set("Idempotency-Key", "test-missing-phone-001")
                 .send({
-                    email: "test@example.com"
+                    customer_email: "test@example.com"
                     // phone_number missing
                 });
 
@@ -104,14 +96,27 @@ describe("Customer Routes", () => {
             expect(customerService.createOrUpdateCustomer).not.toHaveBeenCalled();
         });
 
-        it("should return 400 Validation Error if neither email nor phone is provided", async () => {
-            // Though schema requires phone_number, the refine check also exists.
+        it("should return 400 Validation Error if required fields are missing", async () => {
             // If we send empty object:
             const res = await request(app)
                 .post("/v1/customers")
                 .send({});
 
             expect(res.status).toBe(400);
+        });
+
+        it("should return 400 Validation Error if phone_number is not matching Nigerian format", async () => {
+            const res = await request(app)
+                .post("/v1/customers")
+                .set("Idempotency-Key", "test-invalid-phone-001")
+                .send({
+                    customer_email: "test@example.com",
+                    phone_number: "08012345678" // Invalid format
+                });
+
+            expect(res.status).toBe(400);
+            expect(res.body.message).toContain("Validation Error");
+            expect(res.body.message).toContain("valid Nigerian number starting with +234");
         });
     });
 

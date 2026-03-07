@@ -2,16 +2,9 @@ import { z } from "zod";
 
 export const createCustomerSchema = z.object({
     body: z.object({
-        email: z.string().email().optional().nullable(),
-        phone_number: z.string().min(10, "Phone number is required"),
-        name: z.string().optional().nullable(),
-        first_name: z.string().optional(),
-        last_name: z.string().optional(),
-        date_of_birth: z.string().datetime().optional().or(z.date().optional()), // Accept ISO string or Date object
-    }).strict().refine((data) => data.email || data.phone_number, {
-        message: "Either email or phone number must be provided",
-        path: ["email"], // Attach error to email field
-    }),
+        customer_email: z.string().email("Invalid email format"),
+        phone_number: z.string().regex(/^\+234\d{10}$/, "Phone number must be a valid Nigerian number starting with +234 and exactly 14 characters long"),
+    }).strict(),
 });
 
 export const updateCustomerSchema = z.object({

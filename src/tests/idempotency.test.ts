@@ -19,7 +19,7 @@ const mockCustomer = {
     uid: "cus_123",
     merchant_id: "mer_test_123",
     email: "test@example.com",
-    phone_number: "1234567890",
+    phone_number: "+2348012345678",
     first_name: null,
     last_name: null,
     date_of_birth: null,
@@ -38,7 +38,7 @@ describe("Idempotency Middleware", () => {
             const res = await request(app)
                 .post("/v1/customers")
                 .send({
-                    phone_number: "1234567890",
+                    phone_number: "+2348012345678",
                     email: "test@example.com"
                 });
 
@@ -52,7 +52,7 @@ describe("Idempotency Middleware", () => {
                 .post("/v1/customers")
                 .set("Idempotency-Key", "invalid key with spaces!")
                 .send({
-                    phone_number: "1234567890",
+                    phone_number: "+2348012345678",
                     email: "test@example.com"
                 });
 
@@ -67,8 +67,8 @@ describe("Idempotency Middleware", () => {
                 .post("/v1/customers")
                 .set("Idempotency-Key", "test-key-123")
                 .send({
-                    phone_number: "1234567890",
-                    email: "test@example.com"
+                    phone_number: "+2348012345678",
+                    customer_email: "test@example.com"
                 });
 
             expect(res.status).toBe(200);
@@ -85,8 +85,8 @@ describe("Idempotency Middleware", () => {
                 .post("/v1/customers")
                 .set("Idempotency-Key", idempotencyKey)
                 .send({
-                    phone_number: "1234567890",
-                    email: "test@example.com"
+                    phone_number: "+2348012345678",
+                    customer_email: "test@example.com"
                 });
 
             expect(res1.status).toBe(200);
@@ -97,8 +97,8 @@ describe("Idempotency Middleware", () => {
                 .post("/v1/customers")
                 .set("Idempotency-Key", idempotencyKey)
                 .send({
-                    phone_number: "9999999999", // Different data
-                    email: "different@example.com"
+                    phone_number: "+2348099999999", // Different data
+                    customer_email: "different@example.com"
                 });
 
             expect(res2.status).toBe(200);
@@ -114,8 +114,8 @@ describe("Idempotency Middleware", () => {
                 .post("/v1/customers")
                 .set("Idempotency-Key", "key-1")
                 .send({
-                    phone_number: "1111111111",
-                    email: "user1@example.com"
+                    phone_number: "+2348011111111",
+                    customer_email: "user1@example.com"
                 });
 
             expect(res1.status).toBe(200);
@@ -125,8 +125,8 @@ describe("Idempotency Middleware", () => {
                 .post("/v1/customers")
                 .set("Idempotency-Key", "key-2")
                 .send({
-                    phone_number: "2222222222",
-                    email: "user2@example.com"
+                    phone_number: "+2348022222222",
+                    customer_email: "user2@example.com"
                 });
 
             expect(res2.status).toBe(200);

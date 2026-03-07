@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { db } from "../config/db";
+import { env } from "../config/env";
 import { logger } from "../utils/logger";
 import { AppError } from "../utils/AppError";
 import { webhookService } from "./webhookService";
@@ -8,12 +9,9 @@ import { redisEventService } from "./redisEventService";
 // Define input types for better type safety
 interface CreateCustomerInput {
     merchant_id: string;
-    email: string | null;
+    request_id?: string;
+    customer_email?: string | null;
     phone_number: string;
-    name?: string | null;
-    first_name?: string;
-    last_name?: string;
-    date_of_birth?: Date;
 }
 
 interface UpdateCustomerInput {
@@ -47,21 +45,37 @@ export class CustomerService {
      *   - Handling duplicate detection
      */
     async createOrUpdateCustomer(input: CreateCustomerInput) {
-        const { merchant_id, email, phone_number, first_name, last_name, date_of_birth } = input;
+        const { merchant_id, request_id, customer_email, phone_number } = input;
 
         logger.info("Publishing customer.create event", {
             merchant_id,
             phone_number,
-            has_email: !!email,
+            has_email: !!customer_email,
         });
 
-        const customer = await redisEventService.requestReply("customer.create", {
+        const finalRequestId = request_id || crypto.randomUUID();
+        const dataPayload = {
             merchant_id,
-            email,
+            customer_email: customer_email || null,
             phone_number,
-            first_name,
-            last_name,
-            date_of_birth,
+        };
+
+        const signaturePayload = JSON.stringify({
+            event: "customer.create",
+            request_id: finalRequestId,
+            data: dataPayload
+        });
+
+        // Use the environment variable for the secret key
+        const signature = crypto.createHmac("sha256", env.REWRD_SIGNATURE_KEY)
+            .update(signaturePayload)
+            .digest("hex");
+
+        const customer = await redisEventService.requestReply("customer.create", {
+            event: "customer.create",
+            request_id: finalRequestId,
+            data: dataPayload,
+            signature
         });
 
         logger.info("Customer created/updated via dashboard backend", {

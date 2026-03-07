@@ -12,6 +12,7 @@ export const createOrUpdateCustomer = async (req: Request, res: Response, next: 
 
         const customer = await customerService.createOrUpdateCustomer({
             merchant_id: merchantId,
+            request_id: req.headers["x-request-id"] as string,
             ...req.body
         });
 

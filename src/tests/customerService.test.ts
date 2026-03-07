@@ -58,7 +58,14 @@ jest.mock("../services/redisEventService", () => ({
     RedisEventService: jest.fn(),
 }));
 
-// NOW import CustomerService (it will use the mocked db + mocked redis)
+// Mock the env config
+jest.mock("../config/env", () => ({
+    env: {
+        REWRD_SIGNATURE_KEY: "test_secret_key"
+    }
+}));
+
+// NOW import CustomerService (it will use the mocked db + mocked redis + mocked env)
 import { CustomerService } from "../services/customerService";
 
 // Mock webhookService to prevent side effects and allow assertion
@@ -91,10 +98,8 @@ beforeEach(async () => {
 describe("CustomerService", () => {
     const input = {
         merchant_id: "mer_123",
-        email: "test@example.com",
-        phone_number: "1234567890",
-        first_name: "John",
-        last_name: "Doe",
+        customer_email: "test@example.com",
+        phone_number: "+2348012345678",
     };
 
     describe("createOrUpdateCustomer", () => {
@@ -102,10 +107,8 @@ describe("CustomerService", () => {
             const mockCustomerResult = {
                 uid: "cus_abc123",
                 merchant_id: input.merchant_id,
-                customer_email: input.email,
+                customer_email: input.customer_email,
                 phone_number: input.phone_number,
-                first_name: input.first_name,
-                last_name: input.last_name,
                 status: "active",
             };
 
@@ -115,15 +118,18 @@ describe("CustomerService", () => {
 
             expect(result).toEqual(mockCustomerResult);
             expect(result.uid).toBe("cus_abc123");
-            expect(result.customer_email).toBe(input.email);
+            expect(result.customer_email).toBe(input.customer_email);
 
             // Verify the correct event was published
             expect(mockRequestReply).toHaveBeenCalledWith("customer.create", expect.objectContaining({
-                merchant_id: input.merchant_id,
-                email: input.email,
-                phone_number: input.phone_number,
-                first_name: input.first_name,
-                last_name: input.last_name,
+                event: "customer.create",
+                request_id: expect.any(String),
+                data: {
+                    merchant_id: input.merchant_id,
+                    customer_email: input.customer_email,
+                    phone_number: input.phone_number,
+                },
+                signature: expect.any(String)
             }));
         });
 
@@ -131,10 +137,8 @@ describe("CustomerService", () => {
             const existingCustomer = {
                 uid: "cus_existing",
                 merchant_id: input.merchant_id,
-                customer_email: input.email,
+                customer_email: input.customer_email,
                 phone_number: input.phone_number,
-                first_name: input.first_name,
-                last_name: input.last_name,
                 status: "active",
             };
 
@@ -159,7 +163,7 @@ describe("CustomerService", () => {
             await testDb("UniqueCustomers").insert({
                 uid: "cus_123",
                 customer_email: "test@example.com",
-                phone_number: "1234567890",
+                phone_number: "+2348012345678",
                 first_name: "Test",
             });
 
@@ -171,9 +175,8 @@ describe("CustomerService", () => {
             const result = await customerService.getCustomer("mer_123", "cus_123");
 
             expect(result.uid).toBe("cus_123");
-            expect(result.email).toBe("test@example.com"); // aliased in query
-            expect(result.phone_number).toBe("1234567890");
-            expect(result.first_name).toBe("Test");
+            expect(result.email).toBe("test@example.com"); // Still mapped to "email" locally from db
+            expect(result.phone_number).toBe("+2348012345678");
         });
 
         it("should throw AppError if not found locally", async () => {
@@ -193,7 +196,7 @@ describe("CustomerService", () => {
             await testDb("UniqueCustomers").insert({
                 uid: "cus_123",
                 customer_email: "old@example.com",
-                phone_number: "1234567890",
+                phone_number: "+2348012345678",
                 first_name: "OldName",
             });
 
@@ -220,8 +223,8 @@ describe("CustomerService", () => {
         it("should return paginated result with joined data", async () => {
             // Seed multiple customers
             await testDb("UniqueCustomers").insert([
-                { uid: "cus_1", phone_number: "1111111111", customer_email: "one@test.com" },
-                { uid: "cus_2", phone_number: "2222222222", customer_email: "two@test.com" },
+                { uid: "cus_1", phone_number: "+2348011111111", customer_email: "one@test.com" },
+                { uid: "cus_2", phone_number: "+2348022222222", customer_email: "two@test.com" },
             ]);
 
             await testDb("Customers").insert([
@@ -242,8 +245,8 @@ describe("CustomerService", () => {
 
         it("should filter by email (on UniqueCustomers)", async () => {
             await testDb("UniqueCustomers").insert([
-                { uid: "cus_1", phone_number: "1111111111", customer_email: "findme@test.com" },
-                { uid: "cus_2", phone_number: "2222222222", customer_email: "other@test.com" },
+                { uid: "cus_1", phone_number: "+2348011111111", customer_email: "findme@test.com" },
+                { uid: "cus_2", phone_number: "+2348022222222", customer_email: "other@test.com" },
             ]);
 
             await testDb("Customers").insert([

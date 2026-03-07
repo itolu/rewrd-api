@@ -96,8 +96,9 @@ const router = Router();
  *             type: object
  *             required:
  *               - phone_number
+ *               - customer_email
  *             properties:
- *               email:
+ *               customer_email:
  *                 type: string
  *                 format: email
  *                 description: Customer's email address.
@@ -106,19 +107,6 @@ const router = Router();
  *                 type: string
  *                 description: Customer's phone number. Used as the unique identifier for matching.
  *                 example: "+2348012345678"
- *               first_name:
- *                 type: string
- *                 description: Customer's first name.
- *                 example: "Jane"
- *               last_name:
- *                 type: string
- *                 description: Customer's last name.
- *                 example: "Doe"
- *               date_of_birth:
- *                 type: string
- *                 format: date-time
- *                 description: Customer's date of birth in ISO 8601 format.
- *                 example: "1995-06-15T00:00:00.000Z"
  *     responses:
  *       200:
  *         description: Customer created or updated successfully.
