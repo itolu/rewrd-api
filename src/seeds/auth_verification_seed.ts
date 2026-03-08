@@ -27,7 +27,9 @@ export async function seed(knex: Knex): Promise<void> {
         merchant_id: merchantId,
         key_hash: hashKey(testKey),
         prefix: "sk_test",
-        env: "test"
+        suffix: testKey.slice(-4),
+        env: "test",
+        status: "active"
     });
 
     console.log(`Seeded Merchant: ${merchantId}`);

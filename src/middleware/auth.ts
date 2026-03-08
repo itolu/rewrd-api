@@ -21,9 +21,9 @@ export const verifyApiKey = async (req: Request, res: Response, next: NextFuncti
 
         const hashedKey = hashKey(apiKey);
 
-        // Lookup key in DB
+        // Lookup active key in DB
         const keyRecord = await db("ApiKeys")
-            .where({ key_hash: hashedKey })
+            .where({ key_hash: hashedKey, status: "active" })
             .first();
 
         if (!keyRecord) {

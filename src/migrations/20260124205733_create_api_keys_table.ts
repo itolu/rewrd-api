@@ -6,7 +6,9 @@ export async function up(knex: Knex): Promise<void> {
         table.string("merchant_id").notNullable().references("merchant_id").inTable("Merchants").onDelete("CASCADE");
         table.string("key_hash").notNullable().unique();
         table.string("prefix").notNullable(); // 'sk_live' or 'sk_test'
+        table.string("suffix").notNullable();
         table.string("env").notNullable(); // 'live' or 'test'
+        table.enum("status", ["active", "inactive"]).notNullable().defaultTo("active");
         table.timestamp("created_at").defaultTo(knex.fn.now());
         table.timestamp("last_used").nullable();
 

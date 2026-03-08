@@ -59,7 +59,9 @@ describe("Points Module", () => {
             merchant_id: merchantId,
             key_hash: hashedKey,
             prefix: "sk_test_",
-            env: "test"
+            suffix: apiKey.slice(-4),
+            env: "test",
+            status: "active"
         });
 
         // 3. Create a test customer (Unique and Merchant-specific)

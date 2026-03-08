@@ -9,18 +9,25 @@ datasource db {
 }
 
 model ApiKeys {
-  id          Int      @id @default(autoincrement())
-  merchant_id String
-  key_hash    String   @unique
-  prefix      String
-  env         String
-  created_at  DateTime @default(now())
-  last_used   DateTime?
+  id          Int          @id @default(autoincrement())
+  merchant_id String       @db.VarChar(255)
+  key_hash    String       @unique(map: "apikeys_key_hash_unique") @db.VarChar(255)
+  prefix      String       @db.VarChar(255)
+  suffix      String       @db.VarChar(255)
+  env         String       @db.VarChar(255)
+  status      ApiKeyStatus @default(active)
+  created_at  DateTime?    @default(now()) @db.Timestamptz(6)
+  last_used   DateTime?    @db.Timestamptz(6)
 
-  Merchants   Merchants @relation(fields: [merchant_id], references: [merchant_id], onDelete: Cascade)
+  Merchants   Merchants @relation(fields: [merchant_id], references: [merchant_id], onDelete: Cascade, onUpdate: NoAction, map: "apikeys_merchant_id_foreign")
 
-  @@index([key_hash])
-  @@index([merchant_id])
+  @@index([key_hash], map: "apikeys_key_hash_index")
+  @@index([merchant_id], map: "apikeys_merchant_id_index")
+}
+
+enum ApiKeyStatus {
+  active
+  inactive
 }
 
 model Automation {

@@ -34,7 +34,8 @@ describe("Merchant Configuration Update", () => {
                     where: jest.fn().mockReturnThis(),
                     first: jest.fn().mockResolvedValue({
                         merchant_id: "mer_123",
-                        key_hash: "any_hash"
+                        key_hash: "any_hash",
+                        status: "active"
                     })
                 };
             }

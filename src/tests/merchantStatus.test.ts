@@ -39,7 +39,8 @@ describe("Merchant Status Enforcement", () => {
                     where: jest.fn().mockReturnThis(),
                     first: jest.fn().mockResolvedValue({
                         merchant_id: "mer_123",
-                        key_hash: hashedValidKey
+                        key_hash: hashedValidKey,
+                        status: "active"
                     })
                 };
             }
@@ -80,7 +81,8 @@ describe("Merchant Status Enforcement", () => {
                     where: jest.fn().mockReturnThis(),
                     first: jest.fn().mockResolvedValue({
                         merchant_id: "mer_123",
-                        key_hash: "any_hash" // The actual hash value check happens in the query constraint, but here we mock the result
+                        key_hash: "any_hash", // The actual hash value check happens in the query constraint, but here we mock the result
+                        status: "active"
                     })
                 };
             }
