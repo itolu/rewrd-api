@@ -117,30 +117,74 @@ export class MerchantService {
     }
 
     /**
-     * Get IP whitelist
+     * Get Merchant IPs
      */
-    async getIpWhitelist(merchant_id: string) {
-        const merchant = await db("Merchants")
-            .where({ merchant_id })
-            .select("ip_whitelist")
-            .first();
+    async getMerchantIps(merchant_id: string) {
+        logger.debug("Fetching merchant IPs", { merchant_id });
 
-        return merchant?.ip_whitelist || [];
+        const ips = await db("MerchantIP")
+            .where({ merchant_id, status: "active" })
+            .orderBy("created_at", "desc");
+
+        return ips;
     }
 
     /**
-     * Update IP whitelist
+     * Add Merchant IP
      */
-    async updateIpWhitelist(merchant_id: string, ips: string[]) {
-        await db("Merchants")
-            .where({ merchant_id })
-            .update({
-                ip_whitelist: JSON.stringify(ips),
+    async addMerchantIp(merchant_id: string, ipData: { name: string; ip_address: string; ip_type?: string }) {
+        const [newIp] = await db("MerchantIP")
+            .insert({
+                merchant_id,
+                name: ipData.name,
+                ip_address: ipData.ip_address,
+                ip_type: ipData.ip_type || "ipv4",
+                status: "active",
+                created_at: new Date(),
                 updated_at: new Date()
-            });
+            })
+            .returning("*");
 
-        logger.info("Merchant IP whitelist updated", { merchant_id, ip_count: ips.length });
-        return ips;
+        logger.info("Merchant IP added", { merchant_id, ip_id: newIp.id });
+        return newIp;
+    }
+
+    /**
+     * Update Merchant IP
+     */
+    async updateMerchantIp(merchant_id: string, ip_id: number, updates: { name?: string; ip_address?: string; ip_type?: string; status?: string }) {
+        const ipToUpdate = await db("MerchantIP").where({ id: ip_id, merchant_id }).first();
+
+        if (!ipToUpdate) {
+            throw new AppError("Merchant IP not found", 404, "ip_not_found");
+        }
+
+        const [updatedIp] = await db("MerchantIP")
+            .where({ id: ip_id, merchant_id })
+            .update({
+                ...updates,
+                updated_at: new Date()
+            })
+            .returning("*");
+
+        logger.info("Merchant IP updated", { merchant_id, ip_id });
+        return updatedIp;
+    }
+
+    /**
+     * Delete Merchant IP
+     */
+    async deleteMerchantIp(merchant_id: string, ip_id: number) {
+        const deletedCount = await db("MerchantIP")
+            .where({ id: ip_id, merchant_id })
+            .del();
+
+        if (deletedCount === 0) {
+            throw new AppError("Merchant IP not found", 404, "ip_not_found");
+        }
+
+        logger.info("Merchant IP deleted", { merchant_id, ip_id });
+        return { success: true };
     }
 
     /**

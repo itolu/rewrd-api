@@ -56,13 +56,12 @@ export const getEarningRule = async (req: Request, res: Response, next: NextFunc
     }
 };
 
-export const getIpWhitelist = async (req: Request, res: Response, next: NextFunction) => {
+export const getMerchantIps = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        // Use merchantRecord directly — no need for an extra DB query
-        const ips = req.merchantRecord.ip_whitelist || [];
+        const ips = await merchantService.getMerchantIps(req.merchantRecord.merchant_id);
         res.status(200).json({
             status: true,
-            message: "IP whitelist retrieved successfully",
+            message: "Merchant IPs retrieved successfully",
             data: ips
         });
     } catch (error) {
@@ -70,13 +69,38 @@ export const getIpWhitelist = async (req: Request, res: Response, next: NextFunc
     }
 };
 
-export const updateIpWhitelist = async (req: Request, res: Response, next: NextFunction) => {
+export const addMerchantIp = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const ips = await merchantService.updateIpWhitelist(req.merchantRecord.merchant_id, req.body.ips);
+        const ip = await merchantService.addMerchantIp(req.merchantRecord.merchant_id, req.body);
+        res.status(201).json({
+            status: true,
+            message: "Merchant IP added successfully",
+            data: ip
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const updateMerchantIp = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const ip = await merchantService.updateMerchantIp(req.merchantRecord.merchant_id, Number(req.params.id), req.body);
         res.status(200).json({
             status: true,
-            message: "IP whitelist updated successfully",
-            data: ips
+            message: "Merchant IP updated successfully",
+            data: ip
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const deleteMerchantIp = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        await merchantService.deleteMerchantIp(req.merchantRecord.merchant_id, Number(req.params.id));
+        res.status(200).json({
+            status: true,
+            message: "Merchant IP deleted successfully"
         });
     } catch (error) {
         next(error);

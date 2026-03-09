@@ -27,7 +27,6 @@ describe("Merchant DTO Mapping", () => {
         first_name: "Balogun",
         last_name: "Silver",
         status: "active",
-        ip_whitelist: '[]',
         webhook_url: null,
         webhook_secret: null,
         updated_at: new Date("2025-12-11T11:06:26.040Z"), // Should be excluded
@@ -35,7 +34,7 @@ describe("Merchant DTO Mapping", () => {
         pin_hash: "secret_pin" // Should be excluded
     };
 
-    it("should correctly map exactly 31 requested merchant fields in the strict order", () => {
+    it("should correctly map exactly 26 requested merchant fields in the strict order", () => {
         const response = toMerchantResponse(mockMerchant);
 
         // Check keys order and length
@@ -65,12 +64,11 @@ describe("Merchant DTO Mapping", () => {
             "first_name",
             "last_name",
             "status",
-            "ip_whitelist",
             "webhook_url",
             "webhook_secret"
         ];
 
-        expect(keys.length).toBe(27);
+        expect(keys.length).toBe(26);
         expect(keys).toEqual(expectedOrder);
 
         expect(response).toEqual({
@@ -98,7 +96,6 @@ describe("Merchant DTO Mapping", () => {
             first_name: "Balogun",
             last_name: "Silver",
             status: "active",
-            ip_whitelist: [],
             webhook_url: null,
             webhook_secret: null
         });

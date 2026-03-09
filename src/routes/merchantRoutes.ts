@@ -1,20 +1,24 @@
 import { Router } from "express";
 import {
-    getMerchantConfig,
-    updateMerchantConfig,
-    getEarningRules,
+    getAnalytics,
+    addMerchantIp,
     getEarningRule,
-    getIpWhitelist,
-    updateIpWhitelist,
-    getAnalytics
+    getMerchantIps,
+    getEarningRules,
+    updateMerchantIp,
+    deleteMerchantIp,
+    getMerchantConfig,
+    updateMerchantConfig
 } from "../controllers/merchantController";
 import { validateRequest } from "../middleware/validateRequest";
 import { requireMerchant } from "../middleware/requireMerchant";
 import {
-    updateConfigSchema,
     getRuleSchema,
-    updateIpWhitelistSchema,
-    getAnalyticsSchema
+    updateConfigSchema,
+    getAnalyticsSchema,
+    addMerchantIpSchema,
+    updateMerchantIpSchema,
+    deleteMerchantIpSchema
 } from "../schema/merchantSchema";
 
 const router = Router();
@@ -135,12 +139,6 @@ const router = Router();
  *           type: string
  *           description: Current status of the merchant account.
  *           example: "active"
- *         ip_whitelist:
- *           type: array
- *           items:
- *             type: string
- *           description: List of IP addresses allowed to access the API. An empty list means no IP restriction.
- *           example: ["203.0.113.50", "198.51.100.25"]
  *         webhook_url:
  *           type: string
  *           nullable: true
@@ -465,10 +463,10 @@ router.get("/rules/:id", requireMerchant, validateRequest(getRuleSchema), getEar
 
 /**
  * @swagger
- * /merchant/security/ip-whitelist:
+ * /merchant/security/ips:
  *   get:
- *     summary: Get IP Whitelist
- *     operationId: getIpWhitelist
+ *     summary: List Merchant IPs
+ *     operationId: getMerchantIps
  *     description: |
  *       Retrieves the list of IP addresses that are currently whitelisted for API access.
  *
@@ -491,21 +489,29 @@ router.get("/rules/:id", requireMerchant, validateRequest(getRuleSchema), getEar
  *                   type: array
  *                   description: List of whitelisted IP addresses.
  *                   items:
- *                     type: string
- *                   example: ["203.0.113.50", "198.51.100.25"]
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       name:
+ *                         type: string
+ *                       ip_address:
+ *                         type: string
+ *                       ip_type:
+ *                         type: string
+ *                       status:
+ *                         type: string
  *       401:
  *         description: Unauthorized — missing or invalid API key.
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
- *   put:
- *     summary: Update IP Whitelist
- *     operationId: updateIpWhitelist
+ *   post:
+ *     summary: Add Merchant IP
+ *     operationId: addMerchantIp
  *     description: |
- *       Replaces the entire IP whitelist with the provided list of IP addresses.
- *
- *       **Warning:** Setting an incorrect whitelist can lock you out of your API. Send an empty array `[]` to disable IP whitelisting and allow all IPs.
+ *       Add a new IP address to the merchant's API whitelist.
  *     tags: [Merchant]
  *     security:
  *       - BearerAuth: []
@@ -516,17 +522,21 @@ router.get("/rules/:id", requireMerchant, validateRequest(getRuleSchema), getEar
  *           schema:
  *             type: object
  *             required:
- *               - ips
+ *               - name
+ *               - ip_address
  *             properties:
- *               ips:
- *                 type: array
- *                 description: List of IP addresses to whitelist. Send an empty array to disable IP whitelisting.
- *                 items:
- *                   type: string
- *                 example: ["203.0.113.50", "198.51.100.25"]
+ *               name:
+ *                 type: string
+ *                 description: A human-readable name for this IP
+ *               ip_address:
+ *                 type: string
+ *                 description: The exact IP address
+ *               ip_type:
+ *                 type: string
+ *                 description: ipv4 or ipv6
  *     responses:
- *       200:
- *         description: IP whitelist updated successfully.
+ *       201:
+ *         description: Merchant IP added successfully.
  *         content:
  *           application/json:
  *             schema:
@@ -544,7 +554,7 @@ router.get("/rules/:id", requireMerchant, validateRequest(getRuleSchema), getEar
  *                     type: string
  *                   example: ["203.0.113.50", "198.51.100.25"]
  *       400:
- *         description: Validation error — invalid IP addresses provided.
+ *         description: Validation error — invalid IP details provided.
  *         content:
  *           application/json:
  *             schema:
@@ -555,9 +565,61 @@ router.get("/rules/:id", requireMerchant, validateRequest(getRuleSchema), getEar
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
+ * /merchant/security/ips/{id}:
+ *   patch:
+ *     summary: Update Merchant IP
+ *     operationId: updateMerchantIp
+ *     description: |
+ *       Update details (name, status, etc) of a specific whitelisted IP.
+ *     tags: [Merchant]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               ip_address:
+ *                 type: string
+ *               ip_type:
+ *                 type: string
+ *               status:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Merchant IP updated successfully.
+ *   delete:
+ *     summary: Delete Merchant IP
+ *     operationId: deleteMerchantIp
+ *     description: |
+ *       Remove an IP from the whitelist.
+ *     tags: [Merchant]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Merchant IP deleted successfully.
  */
-router.get("/security/ip-whitelist", requireMerchant, getIpWhitelist);
-router.put("/security/ip-whitelist", requireMerchant, validateRequest(updateIpWhitelistSchema), updateIpWhitelist);
+router.get("/security/ips", requireMerchant, getMerchantIps);
+router.post("/security/ips", requireMerchant, validateRequest(addMerchantIpSchema), addMerchantIp);
+router.patch("/security/ips/:id", requireMerchant, validateRequest(updateMerchantIpSchema), updateMerchantIp);
+router.delete("/security/ips/:id", requireMerchant, validateRequest(deleteMerchantIpSchema), deleteMerchantIp);
 
 /**
  * @swagger

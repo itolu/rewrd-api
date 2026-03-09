@@ -27,9 +27,31 @@ export const getRuleSchema = z.object({
     }).strict()
 });
 
-export const updateIpWhitelistSchema = z.object({
+export const addMerchantIpSchema = z.object({
     body: z.object({
-        ips: z.array(z.string().ip({ version: "v4" })).min(1, "At least one IP is required")
+        name: z.string().min(1, "Name is required"),
+        ip_address: z.string().ip({ version: "v4", message: "Invalid IPv4 address" }).or(z.string().ip({ version: "v6", message: "Invalid IPv6 address" })),
+        ip_type: z.enum(["ipv4", "ipv6"]).optional()
+    }).strict()
+});
+
+export const updateMerchantIpSchema = z.object({
+    params: z.object({
+        id: z.string().regex(/^\d+$/).transform(Number)
+    }).strict(),
+    body: z.object({
+        name: z.string().min(1).optional(),
+        ip_address: z.string().ip({ version: "v4" }).or(z.string().ip({ version: "v6" })).optional(),
+        ip_type: z.enum(["ipv4", "ipv6"]).optional(),
+        status: z.enum(["active", "inactive"]).optional()
+    }).strict().refine(data => Object.keys(data).length > 0, {
+        message: "At least one field must be provided"
+    })
+});
+
+export const deleteMerchantIpSchema = z.object({
+    params: z.object({
+        id: z.string().regex(/^\d+$/).transform(Number)
     }).strict()
 });
 

@@ -23,7 +23,6 @@ export interface MerchantResponse {
     first_name: string | null;
     last_name: string | null;
     status: string;
-    ip_whitelist: string[];
     webhook_url: string | null;
     webhook_secret: string | null;
 }
@@ -54,7 +53,6 @@ export const toMerchantResponse = (merchant: any): MerchantResponse => {
         first_name: merchant.first_name || null,
         last_name: merchant.last_name || null,
         status: merchant.status,
-        ip_whitelist: merchant.ip_whitelist ? (typeof merchant.ip_whitelist === 'string' ? JSON.parse(merchant.ip_whitelist) : merchant.ip_whitelist) : [],
         webhook_url: merchant.webhook_url || null,
         webhook_secret: merchant.webhook_secret || null,
     };
