@@ -14,7 +14,7 @@ const EVENTS_CHANNEL = "rewrd:events";
 const RESULTS_CHANNEL = "rewrd:results";
 
 /** Default timeout for request-reply operations (ms) */
-const DEFAULT_TIMEOUT_MS = 10_000;
+const DEFAULT_TIMEOUT_MS = 300_000;
 
 interface PendingRequest {
     resolve: (data: any) => void;
@@ -22,17 +22,15 @@ interface PendingRequest {
     timer: NodeJS.Timeout;
 }
 
-interface EventPayload {
-    correlationId: string;
-    type: string;
-    payload: any;
-    timestamp: string;
-}
+
 
 interface EventResult {
-    correlationId: string;
-    success: boolean;
+    correlationId?: string;
+    request_id?: string;
+    success?: boolean;
+    status?: boolean;
     data?: any;
+    message?: string;
     error?: {
         message: string;
         code?: string;
@@ -87,27 +85,38 @@ export class RedisEventService {
      * Handle an incoming result from the dashboard backend.
      */
     private handleResult(result: EventResult): void {
-        const pending = this.pendingRequests.get(result.correlationId);
+        console.log("🚀 ~ RedisEventService ~ handleResult ~ result:", result)
+
+        const correlationId = result.correlationId || result.request_id;
+        if (!correlationId) {
+            logger.warn("Received result without correlationId or request_id", { result });
+            return;
+        }
+
+        const pending = this.pendingRequests.get(correlationId);
         if (!pending) {
             logger.warn("Received result for unknown correlationId", {
-                correlationId: result.correlationId,
+                correlationId,
             });
             return;
         }
 
         clearTimeout(pending.timer);
-        this.pendingRequests.delete(result.correlationId);
+        this.pendingRequests.delete(correlationId);
 
-        if (result.success) {
-            logger.debug("Event result received (success)", { correlationId: result.correlationId });
+        const isSuccess = result.success !== undefined ? result.success : result.status;
+
+        if (isSuccess !== false) { // Handle undefined as potentially success if not explicitly false, though status should be explicit
+            logger.debug("Event result received (success)", { correlationId });
             pending.resolve(result.data);
         } else {
             logger.warn("Event result received (failure)", {
-                correlationId: result.correlationId,
-                error: result.error,
+                correlationId,
+                error: result.error || result.message,
             });
+            const errorMessage = result.error?.message || result.message || "Remote processing failed";
             const error = new AppError(
-                result.error?.message || "Remote processing failed",
+                errorMessage,
                 result.error?.statusCode || 500,
                 result.error?.code || "remote_error"
             );
@@ -137,14 +146,11 @@ export class RedisEventService {
      * ```
      */
     async requestReply<T = any>(eventType: string, payload: any, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> {
-        const correlationId = crypto.randomUUID();
+        console.log("🚀 ~ RedisEventService ~ requestReply ~ payload:", payload)
 
-        const event: EventPayload = {
-            correlationId,
-            type: eventType,
-            payload,
-            timestamp: new Date().toISOString(),
-        };
+        // Extract correlationId from payload.request_id (used by dashboard backend)
+        // or generate a new one if not present to avoid errors.
+        const correlationId = payload.request_id || crypto.randomUUID();
 
         return new Promise<T>((resolve, reject) => {
             const timer = setTimeout(() => {
@@ -166,7 +172,7 @@ export class RedisEventService {
             this.pendingRequests.set(correlationId, { resolve, reject, timer });
 
             redisPublisher
-                .publish(EVENTS_CHANNEL, JSON.stringify(event))
+                .publish(EVENTS_CHANNEL, JSON.stringify(payload))
                 .then((subscriberCount) => {
                     logger.info("Event published", {
                         eventType,
@@ -208,18 +214,12 @@ export class RedisEventService {
      * @param payload - Event payload data
      */
     async fireAndForget(eventType: string, payload: any): Promise<void> {
-        const event: EventPayload = {
-            correlationId: crypto.randomUUID(),
-            type: eventType,
-            payload,
-            timestamp: new Date().toISOString(),
-        };
-
         try {
-            const subscriberCount = await redisPublisher.publish(EVENTS_CHANNEL, JSON.stringify(event));
+            const correlationId = payload.request_id || crypto.randomUUID();
+            const subscriberCount = await redisPublisher.publish(EVENTS_CHANNEL, JSON.stringify(payload));
             logger.debug("Fire-and-forget event published", {
                 eventType,
-                correlationId: event.correlationId,
+                correlationId,
                 subscriberCount,
             });
         } catch (err) {
