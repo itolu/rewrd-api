@@ -380,7 +380,17 @@ router.patch("/config", requireMerchant, validateRequest(updateConfigSchema), up
  *     description: |
  *       Retrieves all active (non-deleted) earning rules for your merchant account.
  *
- *       Earning rules define how customers earn points. Each rule has a name, point value, and type. Use the rule `id` when rewarding points via the [`POST /points/transaction`](#/Points/processPointsTransaction) endpoint to automatically associate the reward with the rule.
+ *       **What are earning rules?**
+ *       Earning rules define the logic for how customers earn points. You create them in the Rewrd Dashboard, and then reference them by `id` when processing transactions via the [`POST /points/transaction`](#/Points/processPointsTransaction) endpoint.
+ *
+ *       **Understanding `earning_type`:**
+ *
+ *       | Earning Type | How points are calculated | Example |
+ *       |---|---|---|
+ *       | `fixed` | Awards a flat number of points regardless of order value | Rule says 50 points → Customer always gets 50 points, whether they spend ₦1,000 or ₦100,000 |
+ *       | `percentage_off` | Awards points as a percentage of the order value | Rule says 10% → Customer spends ₦5,000, earns 500 points |
+ *
+ *       Each rule also tracks `users_rewarded`, which is the total number of times it has been used to award points — useful for seeing which rules are most popular.
  *     tags: [Merchant]
  *     security:
  *       - BearerAuth: []
@@ -470,7 +480,18 @@ router.get("/rules/:id", requireMerchant, validateRequest(getRuleSchema), getEar
  *     description: |
  *       Retrieves the list of IP addresses that are currently whitelisted for API access.
  *
- *       When IP whitelisting is active (the list is non-empty), only requests originating from these IPs will be accepted. An empty list means all IPs are allowed.
+ *       **How IP whitelisting works:**
+ *
+ *       IP whitelisting adds an extra layer of security by restricting which servers can make API calls with your key.
+ *
+ *       | Whitelist State | Behavior |
+ *       |---|---|
+ *       | **Empty list** (no IPs added) | All IP addresses are allowed — no restrictions |
+ *       | **Non-empty list** (one or more IPs) | **Only** requests from whitelisted IPs are accepted. All other IPs receive a `403 Forbidden` error. |
+ *
+ *       > ⚠️ **Be careful:** If you add IPs to the whitelist, make sure your server's IP is included, otherwise your own requests will be blocked!
+ *
+ *       **Tip:** You can find your server's public IP by running `curl ifconfig.me` in your terminal.
  *     tags: [Merchant]
  *     security:
  *       - BearerAuth: []
@@ -630,7 +651,17 @@ router.delete("/security/ips/:id", requireMerchant, validateRequest(deleteMercha
  *     description: |
  *       Retrieves aggregated analytics for your loyalty program, filtered by time period.
  *
- *       The summary includes total points earned and redeemed, number of active customers, combined points balance, and total transaction count for the specified period.
+ *       **What each metric means:**
+ *
+ *       | Metric | What it tells you |
+ *       |---|---|
+ *       | `total_earned` | Total points given out to customers — higher means more customer engagement |
+ *       | `total_redeemed` | Total points spent by customers — higher means customers find your rewards valuable |
+ *       | `active_customers` | Customers who earned or redeemed at least once in the period — your "active base" |
+ *       | `total_points_balance` | Combined unspent points across all customers — this is your outstanding liability |
+ *       | `total_transactions` | Total number of credit + debit operations — measures overall program activity |
+ *
+ *       Use the `period` parameter to compare performance across different time windows (today, 7 days, 30 days, or all time).
  *     tags: [Merchant]
  *     security:
  *       - BearerAuth: []

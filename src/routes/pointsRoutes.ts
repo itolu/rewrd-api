@@ -28,7 +28,7 @@ const router = Router();
  *         customer_uid:
  *           type: string
  *           description: The customer who earned or redeemed points.
- *           example: "cust_abc123def456"
+ *           example: "26833813"
  *         points:
  *           type: number
  *           description: Number of points in this transaction.
@@ -84,17 +84,47 @@ const router = Router();
  *     summary: Process a Unified Points Transaction
  *     operationId: processPointsTransaction
  *     description: |
- *       Performs a singular, unified points transaction supporting either "Reward" generation, "Redemption" deduction, or simultaneous checkout operations.
+ *       Process a points transaction for a customer. This single endpoint handles three scenarios:
  *
- *       Both `redeem` and `reward` flags dictate the ledger action.
+ *       **How it works:**
+ *       Use the `reward` and `redeem` boolean flags to tell Rewrd what type of transaction to perform. You can set one or both to `true`.
  *
- *       **If Reward is true:**
- *       `way_to_earn_id` is required. Will credit the equivalent rule earnings against the `order_value`.
+ *       | `reward` | `redeem` | What happens |
+ *       |---|---|---|
+ *       | `true` | `false` | **Reward only** — Customer earns points based on an earning rule. |
+ *       | `false` | `true` | **Redeem only** — Customer spends points toward a purchase. |
+ *       | `true` | `true` | **Combined** — Customer earns AND redeems points in a single checkout. |
  *
- *       **If Redeem is true:**
- *       `deduct_points` is required. Will debit those values from customer balance toward `order_value`.
+ *       ---
  *
- *       This endpoint requires an `Idempotency-Key` header to prevent duplicate redemptions.
+ *       **When `reward` is `true`:**
+ *       You must provide `way_to_earn_id` (the ID of the earning rule from your dashboard). Rewrd will calculate the points to credit based on the rule's type:
+ *       - **Fixed rule** — Awards a fixed number of points regardless of `order_value` (e.g. always award 50 points).
+ *       - **Percentage rule** — Awards points as a percentage of `order_value` (e.g. 10% of ₦5,000 = 500 points).
+ *
+ *       **When `redeem` is `true`:**
+ *       You must provide `deduct_points` — the exact number of points to deduct from the customer's balance. The customer must have enough points, otherwise the request will fail with an `insufficient_points` error.
+ *
+ *       ---
+ *
+ *       **Real-world example — Combined checkout:**
+ *       A customer buys a coffee for ₦5,000. They want to use 200 of their points AND earn new points for the purchase:
+ *       ```json
+ *       {
+ *         "customer_uid": "cust_abc123",
+ *         "order_id": "ORD-003",
+ *         "order_value": 5000,
+ *         "redeem": true,
+ *         "deduct_points": 200,
+ *         "reward": true,
+ *         "way_to_earn_id": 1
+ *       }
+ *       ```
+ *       This will deduct 200 points AND credit new points based on earning rule #1, all in a single atomic operation.
+ *
+ *       ---
+ *
+ *       This endpoint requires an `Idempotency-Key` header to prevent duplicate transactions. Use a unique key per checkout (e.g. your order ID).
  *     tags: [Points]
  *     security:
  *       - BearerAuth: []
@@ -180,6 +210,22 @@ router.post("/transaction", requireIdempotency, validateRequest(transactionSchem
  *       Retrieves a paginated list of all point transactions (credits and redemptions) for a specific customer.
  *
  *       Transactions are sorted by date with the most recent first. Use this endpoint to display a customer's points activity history.
+ *
+ *       **Understanding the response fields:**
+ *
+ *       **`ledger_type`** tells you the direction of the transaction:
+ *       - `credit` — Points were **added** to the customer's balance
+ *       - `debit` — Points were **deducted** from the customer's balance
+ *
+ *       **`transaction_type`** tells you *how* the points were earned or spent:
+ *       | Transaction Type | Meaning |
+ *       |---|---|
+ *       | `member_points_adjustment_credit` | Points were directly credited (manual adjustment) |
+ *       | `member_purchase_order_earned_fixed` | Points earned via a **fixed** earning rule (e.g. "earn 50 points per purchase") |
+ *       | `member_purchase_order_earned_percentage` | Points earned via a **percentage** earning rule (e.g. "earn 10% of order value as points") |
+ *       | `member_purchase_order_redeemed` | Points were redeemed (spent) toward a purchase |
+ *
+ *       **`balance_before`** and **`balance_after`** show the customer's points balance before and after the transaction, so you can verify the math.
  *     tags: [Points]
  *     security:
  *       - BearerAuth: []
@@ -190,7 +236,7 @@ router.post("/transaction", requireIdempotency, validateRequest(transactionSchem
  *         schema:
  *           type: string
  *         description: The unique identifier of the customer.
- *         example: "cust_abc123def456"
+ *         example: "26833813"
  *       - in: query
  *         name: page
  *         schema:

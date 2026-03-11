@@ -3,7 +3,7 @@
   "info": {
     "title": "Rewrd API",
     "version": "1.0.0",
-    "description": "## Introduction\n\nThe Rewrd API is a RESTful API that powers the **Rewrd Loyalty Platform**. It provides programmatic access to manage customers, loyalty points, earning rules, and merchant configurations.\n\n## Authentication\n\nAll API requests require a **Bearer token** (your API key) in the `Authorization` header:\n\n```\nAuthorization: Bearer sk_test_your_api_key_here\n```\n\nAPI keys are scoped to your merchant account. Use `sk_test_` prefixed keys for development and `sk_live_` prefixed keys for production.\n\n## Idempotency\n\nMutation endpoints (`POST`) require an `Idempotency-Key` header to prevent duplicate operations. The key must be alphanumeric with hyphens or underscores, 1–100 characters:\n\n```\nIdempotency-Key: credit-cust123-20260225-001\n```\n\nReplaying a request with the same Idempotency-Key returns the cached response from the original request.\n\n## Rate Limiting\n\nAPI requests are rate-limited per IP address. If you exceed the limit, you'll receive a `429 Too Many Requests` response. Include appropriate retry logic with exponential backoff.\n\n## Error Handling\n\nAll errors follow a consistent format:\n\n```json\n{\n  \"status\": false,\n  \"message\": \"Human-readable error message\",\n  \"error\": {\n    \"code\": \"machine_readable_error_code\",\n    \"request_id\": \"unique-request-id\",\n    \"description\": \"Detailed error description\"\n  }\n}\n```\n\nCommon error codes include `validation_error`, `unauthorized`, `not_found`, `insufficient_points`, and `internal_error`.",
+    "description": "## Introduction\n\nThe Rewrd API is a RESTful API that powers the **Rewrd Loyalty Platform**. It provides programmatic access to manage customers, loyalty points, earning rules, and merchant configurations.\n\nUse the Rewrd API to:\n- **Enroll customers** into your loyalty program\n- **Credit points** when customers make purchases or complete actions\n- **Redeem points** when customers want to use their earned rewards\n- **View analytics** on your loyalty program's performance\n\n---\n\n## Authentication\n\nAll API requests must include your **API key** in the `Authorization` header using the **Bearer** scheme. You can find your API key in the [Rewrd Dashboard](https://getrewrd.com) under **Settings → API Keys**.\n\n```\nAuthorization: Bearer sk_test_your_api_key_here\n```\n\n**Test vs. Live Keys:**\n\n| Key Prefix | Environment | Purpose |\n|---|---|---|\n| `sk_test_` | Sandbox | Use during development. No real points are affected. |\n| `sk_live_` | Production | Use in your live application. Real points are credited/debited. |\n\n> ⚠️ **Keep your API keys secret.** Do not expose them in client-side code (e.g. browser JavaScript, mobile apps). Always call the Rewrd API from your backend server.\n\n**Example request using curl:**\n\n```bash\ncurl https://api.getrewrd.com/v1/customers \\\n  -H \"Authorization: Bearer sk_test_abc123...\"\n```\n\nIf your API key is missing or invalid, you will receive a `401 Unauthorized` error.\n\n---\n\n## Idempotency\n\n**What is idempotency?** Idempotency ensures that if you accidentally send the same request twice (e.g. due to a network timeout or retry), the operation is only performed **once**. This prevents issues like crediting points to a customer twice for the same purchase.\n\nAll mutation endpoints (`POST`) require an `Idempotency-Key` header. The key must be alphanumeric with hyphens or underscores, between 1 and 100 characters:\n\n```\nIdempotency-Key: credit-cust123-20260225-001\n```\n\n**How to generate good idempotency keys:**\n- Combine the action, customer identifier, and a unique reference (like an order ID or timestamp)\n- Examples: `credit-cust_abc123-ORD001`, `redeem-cust_xyz-20260309-tx1`\n- Each unique operation should have a unique key\n\n**What happens when you replay a key?**\n- **Same key + same request body** → Returns the cached response from the original request (no duplicate operation)\n- **Same key + different request body** → Returns a `409 Conflict` error to alert you that the key was already used with different parameters\n\n---\n\n## Rate Limiting\n\nAPI requests are rate-limited per IP address to protect the platform from abuse. If you exceed the limit, you'll receive a `429 Too Many Requests` response.\n\n**How to handle rate limits:** Implement **exponential backoff** — wait progressively longer between retries:\n\n```javascript\nasync function callWithRetry(fn, maxRetries = 3) {\n  for (let attempt = 0; attempt < maxRetries; attempt++) {\n    try {\n      return await fn();\n    } catch (error) {\n      if (error.status === 429 && attempt < maxRetries - 1) {\n        // Wait 1s, then 2s, then 4s...\n        const delay = Math.pow(2, attempt) * 1000;\n        await new Promise(resolve => setTimeout(resolve, delay));\n      } else {\n        throw error;\n      }\n    }\n  }\n}\n```\n\n---\n\n## Error Handling\n\nAll errors follow a consistent JSON format, making it easy to handle them programmatically:\n\n```json\n{\n  \"status\": false,\n  \"message\": \"Human-readable error message\",\n  \"error\": {\n    \"code\": \"machine_readable_error_code\",\n    \"request_id\": \"unique-request-id\",\n    \"description\": \"Detailed error description\"\n  }\n}\n```\n\n**Error Code Reference:**\n\n| Error Code | HTTP Status | Meaning |\n|---|---|---|\n| `validation_error` | 400 | Your request body is missing required fields or has invalid values. Check the `description` field for details. |\n| `unauthorized` | 401 | Your API key is missing, invalid, or has been revoked. |\n| `forbidden` | 403 | Your API key is valid but you don't have permission for this action (e.g. customer is restricted). |\n| `not_found` | 404 | The requested resource (customer, earning rule, etc.) does not exist. |\n| `conflict` | 409 | An idempotency key was reused with different request parameters. |\n| `insufficient_points` | 400 | The customer does not have enough points for the requested redemption. |\n| `internal_error` | 500 | Something went wrong on our end. Retry the request or contact support if it persists. |\n\n**Tip:** Always check `error.code` in your code (not the `message`) for programmatic error handling, since messages may change over time.\n\n---\n\n## Webhooks\n\nWebhooks allow Rewrd to **push real-time notifications** to your server when events occur — for example, when a customer earns or redeems points. Instead of polling the API, you receive an HTTP POST request to your configured URL with the event data.\n\n**Supported events:**\n\n| Event | Description |\n|---|---|\n| `customer.created` | A new customer was enrolled in your loyalty program. |\n| `points.earned` | Points were credited to a customer's account. |\n| `points.redeemed` | Points were deducted from a customer's account. |\n\n### Setting Up Webhooks\n\n1. Go to the **Rewrd Dashboard** → **Settings** → **Webhooks**\n2. Enter your **Webhook URL** (the endpoint on your server that will receive events)\n3. Copy your **Webhook Secret** (starts with `whsec_`) — you'll need this to verify signatures\n\n### Webhook Payload\n\nEvery webhook sends a JSON payload with the following structure:\n\n```json\n{\n  \"id\": \"evt_a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\n  \"event\": \"points.earned\",\n  \"created_at\": \"2026-03-09T14:30:00.000Z\",\n  \"data\": {\n    \"customer_uid\": \"cust_abc123\",\n    \"points\": 50,\n    \"balance_after\": 1550\n  }\n}\n```\n\n### Verifying Webhook Signatures\n\n> 🔒 **Important:** Always verify webhook signatures before processing the payload. This ensures the request actually came from Rewrd and hasn't been tampered with.\n\nEvery webhook request includes an `X-Rewrd-Signature` header with the following format:\n\n```\nX-Rewrd-Signature: t=1672531200,v1=a1b2c3d4e5f6...\n```\n\nThe header contains two parts:\n- **`t`** — A Unix timestamp (seconds) of when the webhook was sent\n- **`v1`** — An HMAC-SHA256 signature of the payload\n\n**Step-by-step verification:**\n\n**Step 1: Extract the timestamp and signature**\nParse the `X-Rewrd-Signature` header by splitting on `,`, then extract the values after `t=` and `v1=`.\n\n**Step 2: Prepare the signed payload string**\nConcatenate the timestamp, a literal dot character (`.`), and the raw JSON request body:\n```\n{timestamp}.{raw_json_body}\n```\n\n**Step 3: Compute the expected signature**\nGenerate an HMAC using SHA-256, with your **webhook secret** as the key and the signed payload string (from Step 2) as the message.\n\n**Step 4: Compare the signatures**\nCompare your computed signature with the `v1` value from the header. If they match, the webhook is authentic.\n\n**Step 5: (Recommended) Prevent replay attacks**\nCheck that the `t` timestamp is within an acceptable window (e.g. 5 minutes). Reject the webhook if the timestamp is too old — this prevents attackers from replaying old webhook payloads.\n\n### Node.js Verification Example\n\n```javascript\nconst crypto = require('crypto');\n\nfunction verifyWebhookSignature(rawBody, signatureHeader, webhookSecret) {\n  // Step 1: Extract timestamp and signature\n  const parts = signatureHeader.split(',');\n  let timestamp, signature;\n\n  for (const part of parts) {\n    const [key, value] = part.split('=');\n    if (key === 't') timestamp = value;\n    if (key === 'v1') signature = value;\n  }\n\n  if (!timestamp || !signature) {\n    throw new Error('Invalid signature header format');\n  }\n\n  // Step 2: Prepare the signed payload\n  const signedPayload = timestamp + '.' + rawBody;\n\n  // Step 3: Compute the expected signature\n  const expectedSignature = crypto\n    .createHmac('sha256', webhookSecret)\n    .update(signedPayload)\n    .digest('hex');\n\n  // Step 4: Compare signatures\n  const isValid = crypto.timingSafeEqual(\n    Buffer.from(expectedSignature),\n    Buffer.from(signature)\n  );\n\n  if (!isValid) {\n    throw new Error('Webhook signature verification failed');\n  }\n\n  // Step 5: Check timestamp tolerance (5 minutes)\n  const currentTime = Math.floor(Date.now() / 1000);\n  if (currentTime - parseInt(timestamp, 10) > 300) {\n    throw new Error('Webhook timestamp is too old — possible replay attack');\n  }\n\n  return JSON.parse(rawBody);\n}\n\n// Usage in an Express route:\napp.post('/webhooks/rewrd', express.raw({ type: 'application/json' }), (req, res) => {\n  try {\n    const event = verifyWebhookSignature(\n      req.body.toString(),\n      req.headers['x-rewrd-signature'],\n      'whsec_your_webhook_secret'\n    );\n    // Process the verified event\n    console.log('Received event:', event.event);\n    res.status(200).send('OK');\n  } catch (err) {\n    console.error('Webhook verification failed:', err.message);\n    res.status(400).send('Invalid signature');\n  }\n});\n```\n\n> 💡 **Tip:** Make sure to use the **raw request body** (not a parsed JSON object) for signature verification. If your framework parses the body automatically, the re-serialized JSON may differ from the original, causing signature mismatches.\n\n### Retry Behavior\n\nIf your endpoint does not return a `2xx` status code, Rewrd will retry the webhook up to **3 times** with exponential backoff (1s, 2s, 4s delays). After 3 failed attempts, the webhook is dropped. Ensure your endpoint responds quickly (within 5 seconds) to avoid timeouts.",
     "contact": {
       "name": "Rewrd Engineering",
       "url": "https://getrewrd.com"
@@ -112,7 +112,7 @@
           "uid": {
             "type": "string",
             "description": "Unique identifier for the customer, generated by Rewrd.",
-            "example": "cust_abc123def456"
+            "example": "26833813"
           },
           "email": {
             "type": "string",
@@ -304,17 +304,6 @@
             "description": "Current status of the merchant account.",
             "example": "active"
           },
-          "ip_whitelist": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "List of IP addresses allowed to access the API. An empty list means no IP restriction.",
-            "example": [
-              "203.0.113.50",
-              "198.51.100.25"
-            ]
-          },
           "webhook_url": {
             "type": "string",
             "nullable": true,
@@ -448,30 +437,15 @@
             "description": "Unique identifier for this transaction.",
             "example": 1284
           },
-          "merchant_id": {
-            "type": "string",
-            "description": "The merchant account this transaction belongs to.",
-            "example": "merch_xyz789"
-          },
           "customer_uid": {
             "type": "string",
             "description": "The customer who earned or redeemed points.",
-            "example": "cust_abc123def456"
+            "example": "26833813"
           },
-          "amount": {
+          "points": {
             "type": "number",
-            "description": "Number of points in this transaction. Positive for credits, negative for redemptions.",
+            "description": "Number of points in this transaction.",
             "example": 50
-          },
-          "transaction_type": {
-            "type": "string",
-            "description": "Type of transaction:\n- `member_points_adjustment_credit` — direct point credit\n- `member_purchase_order_earned_fixed` — points earned via a fixed earning rule\n- `member_purchase_order_earned_percentage` — points earned via a percentage earning rule\n- `member_purchase_order_redeemed` — points redeemed\n",
-            "example": "member_points_adjustment_credit"
-          },
-          "reference_id": {
-            "type": "string",
-            "description": "Unique reference ID for this transaction, used for deduplication.",
-            "example": "credit_a1b2c3d4-e5f6-7890"
           },
           "title": {
             "type": "string",
@@ -482,6 +456,31 @@
             "type": "string",
             "description": "Optional description or note for this transaction.",
             "example": "Credited 50 points for purchase #12345"
+          },
+          "transaction_type": {
+            "type": "string",
+            "description": "Type of transaction:\n- `member_points_adjustment_credit` — direct point credit\n- `member_purchase_order_earned_fixed` — points earned via a fixed earning rule\n- `member_purchase_order_earned_percentage` — points earned via a percentage earning rule\n- `member_purchase_order_redeemed` — points redeemed\n",
+            "example": "member_points_adjustment_credit"
+          },
+          "ledger_type": {
+            "type": "string",
+            "description": "Generic type of ledger entry (credit or debit).",
+            "example": "credit"
+          },
+          "status": {
+            "type": "string",
+            "description": "Status of the transaction.",
+            "example": "successful"
+          },
+          "reference_id": {
+            "type": "string",
+            "description": "Unique reference ID for this transaction, used for deduplication.",
+            "example": "credit_a1b2c3d4-e5f6-7890"
+          },
+          "balance_before": {
+            "type": "number",
+            "description": "Customer's points balance before this transaction was applied.",
+            "example": 1500
           },
           "balance_after": {
             "type": "number",
@@ -508,7 +507,7 @@
       "post": {
         "summary": "Create or Update a Customer",
         "operationId": "createOrUpdateCustomer",
-        "description": "Creates a new customer or updates an existing one (upsert). The customer is matched by `phone_number` within your merchant account.\n\n**Upsert behavior:**\n- If no customer with the given `phone_number` exists, a new customer is created with status `active` and 0 points balance.\n- If a customer already exists with that `phone_number`, the provided fields are updated (only non-null fields are overwritten).\n\nThis endpoint requires an `Idempotency-Key` header to prevent duplicate customer creation from retried requests.\n",
+        "description": "Creates a new customer or updates an existing one. This is an **upsert** operation — meaning \"update if exists, insert (create) if not\".\n\n**How the matching works:**\nRewrd uses the `phone_number` to check if a customer already exists in your merchant account:\n- **New customer** (phone number not found) → A new customer record is created with status `active` and 0 points balance.\n- **Existing customer** (phone number already exists) → Only the fields you provide are updated. Fields you don't include are left unchanged.\n\nThis makes it safe to call this endpoint every time a user signs up or logs in — you won't create duplicates.\n\n---\n\n**Quick Start — Enroll your first customer:**\n\n```bash\ncurl -X POST https://api.getrewrd.com/v1/customers \\\n  -H \"Authorization: Bearer sk_test_your_api_key\" \\\n  -H \"Content-Type: application/json\" \\\n  -H \"Idempotency-Key: enroll-jane-001\" \\\n  -d '{\n    \"customer_email\": \"jane@example.com\",\n    \"phone_number\": \"+2348012345678\"\n  }'\n```\n\n---\n\nThis endpoint requires an `Idempotency-Key` header to prevent duplicate customer creation from retried requests.\n",
         "tags": [
           "Customers"
         ],
@@ -537,10 +536,11 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "phone_number"
+                  "phone_number",
+                  "customer_email"
                 ],
                 "properties": {
-                  "email": {
+                  "customer_email": {
                     "type": "string",
                     "format": "email",
                     "description": "Customer's email address.",
@@ -550,22 +550,6 @@
                     "type": "string",
                     "description": "Customer's phone number. Used as the unique identifier for matching.",
                     "example": "+2348012345678"
-                  },
-                  "first_name": {
-                    "type": "string",
-                    "description": "Customer's first name.",
-                    "example": "Jane"
-                  },
-                  "last_name": {
-                    "type": "string",
-                    "description": "Customer's last name.",
-                    "example": "Doe"
-                  },
-                  "date_of_birth": {
-                    "type": "string",
-                    "format": "date-time",
-                    "description": "Customer's date of birth in ISO 8601 format.",
-                    "example": "1995-06-15T00:00:00.000Z"
                   }
                 }
               }
@@ -735,7 +719,7 @@
               "type": "string"
             },
             "description": "The unique identifier of the customer.",
-            "example": "cust_abc123def456"
+            "example": "26833813"
           }
         ],
         "responses": {
@@ -805,7 +789,7 @@
               "type": "string"
             },
             "description": "The unique identifier of the customer to update.",
-            "example": "cust_abc123def456"
+            "example": "26833813"
           }
         ],
         "requestBody": {
@@ -906,7 +890,7 @@
       "patch": {
         "summary": "Restrict a Customer",
         "operationId": "restrictCustomer",
-        "description": "Restricts a customer, preventing them from earning or redeeming points. The customer's existing points balance is preserved but frozen.\n\nUse this for fraud prevention or when a customer account needs to be temporarily suspended. Only `active` customers can be restricted.\n",
+        "description": "Restricts a customer, preventing them from earning or redeeming points. The customer's existing points balance is preserved but frozen.\n\n**When to use this:**\n- **Fraud prevention** — You suspect a customer is abusing the program\n- **Dispute resolution** — A customer disputes a transaction and you want to freeze their account while investigating\n- **Temporary suspension** — The customer requested a pause on their account\n\n**Customer status lifecycle:**\n```\nactive ──(restrict)──► restricted ──(unrestrict)──► active\n```\n\nOnly `active` customers can be restricted. If the customer is already `restricted`, this endpoint will return a `403` error.\n",
         "tags": [
           "Customers"
         ],
@@ -924,7 +908,7 @@
               "type": "string"
             },
             "description": "The unique identifier of the customer to restrict.",
-            "example": "cust_abc123def456"
+            "example": "26833813"
           }
         ],
         "responses": {
@@ -1003,7 +987,7 @@
               "type": "string"
             },
             "description": "The unique identifier of the customer to unrestrict.",
-            "example": "cust_abc123def456"
+            "example": "26833813"
           }
         ],
         "responses": {
@@ -1235,7 +1219,7 @@
       "get": {
         "summary": "List Earning Rules",
         "operationId": "listEarningRules",
-        "description": "Retrieves all active (non-deleted) earning rules for your merchant account.\n\nEarning rules define how customers earn points. Each rule has a name, point value, and type. Use the rule `id` when crediting points via the [`POST /points/credit`](#/Points/creditPoints) endpoint to automatically associate the credit with the rule.\n",
+        "description": "Retrieves all active (non-deleted) earning rules for your merchant account.\n\n**What are earning rules?**\nEarning rules define the logic for how customers earn points. You create them in the Rewrd Dashboard, and then reference them by `id` when processing transactions via the [`POST /points/transaction`](#/Points/processPointsTransaction) endpoint.\n\n**Understanding `earning_type`:**\n\n| Earning Type | How points are calculated | Example |\n|---|---|---|\n| `fixed` | Awards a flat number of points regardless of order value | Rule says 50 points → Customer always gets 50 points, whether they spend ₦1,000 or ₦100,000 |\n| `percentage_off` | Awards points as a percentage of the order value | Rule says 10% → Customer spends ₦5,000, earns 500 points |\n\nEach rule also tracks `users_rewarded`, which is the total number of times it has been used to award points — useful for seeing which rules are most popular.\n",
         "tags": [
           "Merchant"
         ],
@@ -1356,11 +1340,11 @@
         }
       }
     },
-    "/merchant/security/ip-whitelist": {
+    "/merchant/security/ips": {
       "get": {
-        "summary": "Get IP Whitelist",
-        "operationId": "getIpWhitelist",
-        "description": "Retrieves the list of IP addresses that are currently whitelisted for API access.\n\nWhen IP whitelisting is active (the list is non-empty), only requests originating from these IPs will be accepted. An empty list means all IPs are allowed.\n",
+        "summary": "List Merchant IPs",
+        "operationId": "getMerchantIps",
+        "description": "Retrieves the list of IP addresses that are currently whitelisted for API access.\n\n**How IP whitelisting works:**\n\nIP whitelisting adds an extra layer of security by restricting which servers can make API calls with your key.\n\n| Whitelist State | Behavior |\n|---|---|\n| **Empty list** (no IPs added) | All IP addresses are allowed — no restrictions |\n| **Non-empty list** (one or more IPs) | **Only** requests from whitelisted IPs are accepted. All other IPs receive a `403 Forbidden` error. |\n\n> ⚠️ **Be careful:** If you add IPs to the whitelist, make sure your server's IP is included, otherwise your own requests will be blocked!\n\n**Tip:** You can find your server's public IP by running `curl ifconfig.me` in your terminal.\n",
         "tags": [
           "Merchant"
         ],
@@ -1385,12 +1369,25 @@
                       "type": "array",
                       "description": "List of whitelisted IP addresses.",
                       "items": {
-                        "type": "string"
-                      },
-                      "example": [
-                        "203.0.113.50",
-                        "198.51.100.25"
-                      ]
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "ip_address": {
+                            "type": "string"
+                          },
+                          "ip_type": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string"
+                          }
+                        }
+                      }
                     }
                   }
                 }
@@ -1409,10 +1406,10 @@
           }
         }
       },
-      "put": {
-        "summary": "Update IP Whitelist",
-        "operationId": "updateIpWhitelist",
-        "description": "Replaces the entire IP whitelist with the provided list of IP addresses.\n\n**Warning:** Setting an incorrect whitelist can lock you out of your API. Send an empty array `[]` to disable IP whitelisting and allow all IPs.\n",
+      "post": {
+        "summary": "Add Merchant IP",
+        "operationId": "addMerchantIp",
+        "description": "Add a new IP address to the merchant's API whitelist.\n",
         "tags": [
           "Merchant"
         ],
@@ -1428,19 +1425,21 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "ips"
+                  "name",
+                  "ip_address"
                 ],
                 "properties": {
-                  "ips": {
-                    "type": "array",
-                    "description": "List of IP addresses to whitelist. Send an empty array to disable IP whitelisting.",
-                    "items": {
-                      "type": "string"
-                    },
-                    "example": [
-                      "203.0.113.50",
-                      "198.51.100.25"
-                    ]
+                  "name": {
+                    "type": "string",
+                    "description": "A human-readable name for this IP"
+                  },
+                  "ip_address": {
+                    "type": "string",
+                    "description": "The exact IP address"
+                  },
+                  "ip_type": {
+                    "type": "string",
+                    "description": "ipv4 or ipv6"
                   }
                 }
               }
@@ -1448,8 +1447,8 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "IP whitelist updated successfully.",
+          "201": {
+            "description": "Merchant IP added successfully.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1479,7 +1478,7 @@
             }
           },
           "400": {
-            "description": "Validation error — invalid IP addresses provided.",
+            "description": "Validation error — invalid IP details provided.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1501,11 +1500,93 @@
         }
       }
     },
+    "/merchant/security/ips/{id}": {
+      "patch": {
+        "summary": "Update Merchant IP",
+        "operationId": "updateMerchantIp",
+        "description": "Update details (name, status, etc) of a specific whitelisted IP.\n",
+        "tags": [
+          "Merchant"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "ip_address": {
+                    "type": "string"
+                  },
+                  "ip_type": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Merchant IP updated successfully."
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete Merchant IP",
+        "operationId": "deleteMerchantIp",
+        "description": "Remove an IP from the whitelist.\n",
+        "tags": [
+          "Merchant"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Merchant IP deleted successfully."
+          }
+        }
+      }
+    },
     "/merchant/analytics": {
       "get": {
         "summary": "Get Merchant Analytics",
         "operationId": "getMerchantAnalytics",
-        "description": "Retrieves aggregated analytics for your loyalty program, filtered by time period.\n\nThe summary includes total points earned and redeemed, number of active customers, combined points balance, and total transaction count for the specified period.\n",
+        "description": "Retrieves aggregated analytics for your loyalty program, filtered by time period.\n\n**What each metric means:**\n\n| Metric | What it tells you |\n|---|---|\n| `total_earned` | Total points given out to customers — higher means more customer engagement |\n| `total_redeemed` | Total points spent by customers — higher means customers find your rewards valuable |\n| `active_customers` | Customers who earned or redeemed at least once in the period — your \"active base\" |\n| `total_points_balance` | Combined unspent points across all customers — this is your outstanding liability |\n| `total_transactions` | Total number of credit + debit operations — measures overall program activity |\n\nUse the `period` parameter to compare performance across different time windows (today, 7 days, 30 days, or all time).\n",
         "tags": [
           "Merchant"
         ],
@@ -1569,11 +1650,11 @@
         }
       }
     },
-    "/points/credit": {
+    "/points/transaction": {
       "post": {
-        "summary": "Credit Points to a Customer",
-        "operationId": "creditPoints",
-        "description": "Awards loyalty points to a customer's account. The specified number of points is added to the customer's balance and deducted from your merchant point pool.\n\n**Earning Rule Association (optional):**\nYou can associate the credit with an earning rule by providing a `rule_id`. This links the transaction to the rule for analytics and automatically uses the rule's name and type in the transaction record. The rule must be `active` and not deleted.\n\n**Webhooks:**\nA `points.earned` webhook event is fired after a successful credit, containing the `customer_uid`, `points`, `rule_id`, and `ledger_id`.\n\nThis endpoint requires an `Idempotency-Key` header to prevent duplicate credits.\n",
+        "summary": "Process a Unified Points Transaction",
+        "operationId": "processPointsTransaction",
+        "description": "Process a points transaction for a customer. This single endpoint handles three scenarios:\n\n**How it works:**\nUse the `reward` and `redeem` boolean flags to tell Rewrd what type of transaction to perform. You can set one or both to `true`.\n\n| `reward` | `redeem` | What happens |\n|---|---|---|\n| `true` | `false` | **Reward only** — Customer earns points based on an earning rule. |\n| `false` | `true` | **Redeem only** — Customer spends points toward a purchase. |\n| `true` | `true` | **Combined** — Customer earns AND redeems points in a single checkout. |\n\n---\n\n**When `reward` is `true`:**\nYou must provide `way_to_earn_id` (the ID of the earning rule from your dashboard). Rewrd will calculate the points to credit based on the rule's type:\n- **Fixed rule** — Awards a fixed number of points regardless of `order_value` (e.g. always award 50 points).\n- **Percentage rule** — Awards points as a percentage of `order_value` (e.g. 10% of ₦5,000 = 500 points).\n\n**When `redeem` is `true`:**\nYou must provide `deduct_points` — the exact number of points to deduct from the customer's balance. The customer must have enough points, otherwise the request will fail with an `insufficient_points` error.\n\n---\n\n**Real-world example — Combined checkout:**\nA customer buys a coffee for ₦5,000. They want to use 200 of their points AND earn new points for the purchase:\n```json\n{\n  \"customer_uid\": \"cust_abc123\",\n  \"order_id\": \"ORD-003\",\n  \"order_value\": 5000,\n  \"redeem\": true,\n  \"deduct_points\": 200,\n  \"reward\": true,\n  \"way_to_earn_id\": 1\n}\n```\nThis will deduct 200 points AND credit new points based on earning rule #1, all in a single atomic operation.\n\n---\n\nThis endpoint requires an `Idempotency-Key` header to prevent duplicate transactions. Use a unique key per checkout (e.g. your order ID).\n",
         "tags": [
           "Points"
         ],
@@ -1592,7 +1673,7 @@
               "pattern": "^[a-zA-Z0-9_-]{1,100}$"
             },
             "description": "Unique key for idempotent request handling. Must be alphanumeric with hyphens or underscores, 1–100 characters.",
-            "example": "credit-cust123-20260225-001"
+            "example": "tx-cust123-20260225-001"
           }
         ],
         "requestBody": {
@@ -1603,152 +1684,46 @@
                 "type": "object",
                 "required": [
                   "customer_uid",
-                  "points"
+                  "order_id",
+                  "order_value",
+                  "redeem",
+                  "reward"
                 ],
                 "properties": {
                   "customer_uid": {
                     "type": "string",
-                    "description": "The UID of the customer to credit points to.",
-                    "example": "cust_abc123def456"
-                  },
-                  "points": {
-                    "type": "integer",
-                    "description": "Number of points to credit. Must be a positive integer.",
-                    "example": 50
-                  },
-                  "rule_id": {
-                    "type": "integer",
-                    "description": "Optional ID of an earning rule to associate with this credit. The rule must be active.",
-                    "example": 42
-                  },
-                  "narration": {
-                    "type": "string",
-                    "description": "Optional note or description for this transaction.",
-                    "example": "Reward for purchase #12345"
+                    "description": "The UID of the customer making the checkout.",
+                    "example": "cust_abc123"
                   },
                   "order_id": {
                     "type": "string",
-                    "description": "Optional external order ID to link this credit to a specific purchase.",
-                    "example": "order_98765"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Points credited successfully. Returns the created ledger entry.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "boolean",
-                      "example": true
-                    },
-                    "message": {
-                      "type": "string",
-                      "example": "Points credited successfully"
-                    },
-                    "data": {
-                      "$ref": "#/components/schemas/PointsTransaction"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error — missing required fields or invalid values.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized — missing or invalid API key.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Customer or earning rule not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/points/redeem": {
-      "post": {
-        "summary": "Redeem Points",
-        "operationId": "redeemPoints",
-        "description": "Deducts loyalty points from a customer's account for a redemption. The specified number of points is subtracted from the customer's balance and added back to your merchant point pool.\n\n**Balance checks:**\n- The customer must have sufficient points balance to cover the redemption.\n- The customer must meet the configured minimum threshold amount for redemption.\n- The customer must be in `active` status (not restricted).\n\n**Webhooks:**\nA `points.redeemed` webhook event is fired after a successful redemption, containing the `customer_uid`, `points`, `reward_id`, and `ledger_id`.\n\nThis endpoint requires an `Idempotency-Key` header to prevent duplicate redemptions.\n",
-        "tags": [
-          "Points"
-        ],
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "in": "header",
-            "name": "Idempotency-Key",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "pattern": "^[a-zA-Z0-9_-]{1,100}$"
-            },
-            "description": "Unique key for idempotent request handling. Must be alphanumeric with hyphens or underscores, 1–100 characters.",
-            "example": "redeem-cust123-20260225-001"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "customer_uid",
-                  "points"
-                ],
-                "properties": {
-                  "customer_uid": {
-                    "type": "string",
-                    "description": "The UID of the customer to redeem points from.",
-                    "example": "cust_abc123def456"
+                    "description": "External order ID tying this points usage to a checkout basket.",
+                    "example": "ORD-003"
                   },
-                  "points": {
+                  "order_value": {
+                    "type": "number",
+                    "description": "The fiat value of the items in the total basket.",
+                    "example": 10000
+                  },
+                  "redeem": {
+                    "type": "boolean",
+                    "description": "True if the customer is choosing to deduct points towards the purchase.",
+                    "example": true
+                  },
+                  "reward": {
+                    "type": "boolean",
+                    "description": "True if the order creates an earning opportunity.",
+                    "example": true
+                  },
+                  "deduct_points": {
                     "type": "integer",
-                    "description": "Number of points to redeem. Must be a positive integer and not exceed the customer's balance.",
+                    "description": "Quantity of points exactly to be removed (required if redeem is true).",
                     "example": 200
                   },
-                  "reward_id": {
-                    "type": "string",
-                    "description": "Optional ID of the reward being redeemed (for tracking purposes).",
-                    "example": "reward_coffee_free"
-                  },
-                  "narration": {
-                    "type": "string",
-                    "description": "Optional note or description for this redemption.",
-                    "example": "Redeemed for free coffee"
+                  "way_to_earn_id": {
+                    "type": "integer",
+                    "description": "Pre-configured loyalty mechanism integer rule (required if reward is true).",
+                    "example": 1
                   }
                 }
               }
@@ -1757,7 +1732,7 @@
         },
         "responses": {
           "200": {
-            "description": "Points redeemed successfully. Returns the created ledger entry.",
+            "description": "Transaction executed properly.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1769,10 +1744,13 @@
                     },
                     "message": {
                       "type": "string",
-                      "example": "Points redeemed successfully"
+                      "example": "Transaction processed successfully"
                     },
                     "data": {
-                      "$ref": "#/components/schemas/PointsTransaction"
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PointsTransaction"
+                      }
                     }
                   }
                 }
@@ -1780,34 +1758,13 @@
             }
           },
           "400": {
-            "description": "Validation error or insufficient points balance.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
+            "description": "Validation error — missing required condition triggers."
           },
           "401": {
-            "description": "Unauthorized — missing or invalid API key.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
+            "description": "Unauthorized — missing or invalid API key."
           },
           "404": {
-            "description": "Customer not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
+            "description": "Customer or earning rule not found."
           }
         }
       }
@@ -1816,7 +1773,7 @@
       "get": {
         "summary": "Get Customer Transaction History",
         "operationId": "getCustomerTransactions",
-        "description": "Retrieves a paginated list of all point transactions (credits and redemptions) for a specific customer.\n\nTransactions are sorted by date with the most recent first. Use this endpoint to display a customer's points activity history.\n",
+        "description": "Retrieves a paginated list of all point transactions (credits and redemptions) for a specific customer.\n\nTransactions are sorted by date with the most recent first. Use this endpoint to display a customer's points activity history.\n\n**Understanding the response fields:**\n\n**`ledger_type`** tells you the direction of the transaction:\n- `credit` — Points were **added** to the customer's balance\n- `debit` — Points were **deducted** from the customer's balance\n\n**`transaction_type`** tells you *how* the points were earned or spent:\n| Transaction Type | Meaning |\n|---|---|\n| `member_points_adjustment_credit` | Points were directly credited (manual adjustment) |\n| `member_purchase_order_earned_fixed` | Points earned via a **fixed** earning rule (e.g. \"earn 50 points per purchase\") |\n| `member_purchase_order_earned_percentage` | Points earned via a **percentage** earning rule (e.g. \"earn 10% of order value as points\") |\n| `member_purchase_order_redeemed` | Points were redeemed (spent) toward a purchase |\n\n**`balance_before`** and **`balance_after`** show the customer's points balance before and after the transaction, so you can verify the math.\n",
         "tags": [
           "Points"
         ],
@@ -1834,7 +1791,7 @@
               "type": "string"
             },
             "description": "The unique identifier of the customer.",
-            "example": "cust_abc123def456"
+            "example": "26833813"
           },
           {
             "in": "query",
